@@ -1,0 +1,75 @@
+body {
+  font-family: Arial, sans-serif;
+  height: 100;
+  margin: 0;
+  background-color:#6850bd31;
+  user-select: none;
+} 
+
+.context-menu {
+  position: absolute;
+  display: block; /* 永遠佔位，透過透明度控制可見性 */
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  background: #6850bd31;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #6850bd31;
+  border-radius: 8px;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+  z-index: 1000;
+  min-width: 180px;
+  color: white;
+}
+
+.context-menu.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.context-menu.hiding {
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none;
+}
+
+#custom-menu:not(.show):not(.hiding) {
+  display: block;
+  visibility: hidden;
+}
+
+.context-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.context-menu li {
+  padding: 10px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+ .context-menu li:hover {
+  background-color: #6850bd5e;
+}
+/* -------------------右鍵選單------------------- */
+
+.clock {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translate(-50%, -50%); /* ✅ 讓時鐘中心點對齊畫面中心 */
+  font-size: 24px;
+  font-family: 'Courier New', monospace;
+  color: white;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 8px;
+  z-index: 999;
+}
+
+
