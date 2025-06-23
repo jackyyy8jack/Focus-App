@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- ------右鍵選單start------ -->
   <div id="custom-menu" class="context-menu">
     <ul>
       <li onclick="alert('tomato-clock')">番茄鐘 🍅</li>
@@ -14,8 +15,23 @@
       <li onclick="alert('關閉應用')">關閉應用 ❌</li>
     </ul>
   </div>
+   <!-- ------右鍵選單end------ -->
+  <!-- ------時鐘start------ -->
+  <div id="clock" class="clock">
+    <div id="hour" class="hour">00</div>
+    <div class="colon">:</div>
+    <div id="minute" class="minute">00</div>
+    <!-- <div class="colon">:</div>
+    <div id="second" class="second">00</div> -->
+  </div>
 
-  <div id="clock" class="clock">0000000</div>
+  <div id="clock-menu" class="context-menu">   <!-- 時鐘右鍵選單 -->
+    <ul>
+      <li onclick="resetClockPosition()">回復預設位置 🔄</li>
+    </ul>
+  </div>
+
+  <!-- ------時鐘end------ -->
 
 
   <script src="script.js"></script>
