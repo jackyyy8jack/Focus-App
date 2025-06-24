@@ -1,6 +1,12 @@
 const menu = document.getElementById("custom-menu");
 let fadeOutTimer = null;
 
+
+function closeApp() {
+  window.electronAPI.closeApp();
+}
+
+
 /* -------------------只有一個選單存在start------------------- */
 function closeAllMenus() {
   fadeOut();
