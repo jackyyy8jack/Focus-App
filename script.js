@@ -1,11 +1,48 @@
-const menu = document.getElementById("custom-menu");
-let fadeOutTimer = null;
-
-
+/* -------------------關閉程式start------------------- */
 function closeApp() {
   window.electronAPI.closeApp();
 }
+/* -------------------關閉程式end------------------- */
 
+
+/* -------------------番茄鐘start------------------- */
+
+function showTomato() {
+  document.getElementById('tomato-widget').style.display = 'block';
+  widget.style.left = '100px';
+  widget.style.top = '100px';
+}
+
+function hideTomato() {
+  document.getElementById('tomato-widget').style.display = 'none';
+}
+
+
+const widget = document.getElementById('tomato-widget');
+const handle = document.getElementById('drag-handle');
+
+let tomato_isDragging = false;
+let tomato_offsetX = 0;
+let tomato_offsetY = 0;
+
+handle.addEventListener('mousedown', (e) => {
+  tomato_isDragging = true;
+  tomato_offsetX = e.clientX - widget.offsetLeft;
+  tomato_offsetY = e.clientY - widget.offsetTop;
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (tomato_isDragging) {
+    widget.style.left = (e.clientX - tomato_offsetX) + 'px';
+    widget.style.top = (e.clientY - tomato_offsetY) + 'px';
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  tomato_isDragging = false;
+});
+
+/* -------------------番茄鐘end------------------- */
 
 /* -------------------只有一個選單存在start------------------- */
 function closeAllMenus() {
@@ -18,6 +55,8 @@ function closeAllMenus() {
 
 /* -------------------右鍵選單start------------------- */
 // 右鍵觸發選單
+const menu = document.getElementById("custom-menu");
+let fadeOutTimer = null;
 document.addEventListener("contextmenu", function (e) {
   e.preventDefault();
 

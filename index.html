@@ -9,7 +9,7 @@
   <!-- ------右鍵選單start------ -->
   <div id="custom-menu" class="context-menu">
     <ul>
-      <li onclick="alert('tomato-clock')">番茄鐘 🍅</li>
+      <li onclick="showTomato()">番茄鐘 🍅</li>
       <li onclick="alert('music')">音樂 🎵</li>
       <li onclick="alert('setting')">設定 ⚙️</li>
       <li onclick="closeApp()">關閉應用 ❌</li>
@@ -21,8 +21,6 @@
     <div id="hour" class="hour">00</div>
     <div class="colon">:</div>
     <div id="minute" class="minute">00</div>
-    <!-- <div class="colon">:</div>
-    <div id="second" class="second">00</div> -->
   </div>
 
   <div id="clock-menu" class="context-menu">   <!-- 時鐘右鍵選單 -->
@@ -33,6 +31,21 @@
 
   <!-- ------時鐘end------ -->
 
+  <!-- ------番茄鐘start------ -->
+  <div id="tomato-widget" class="widget">
+    <div class="widget-header" id="drag-handle">番茄鐘 🍅</div>
+    <div class="widget-body" id="timer">25:00</div>
+    <button onclick="startTimer()">開始</button>
+    <button onclick="hideTomato()">關閉</button>
+  </div>
+
+  <div id="tomato-menu" class="context-menu">   <!-- 番茄鐘右鍵選單 -->
+    <ul>
+      <li onclick="resetClockPosition()">回復預設位置 🔄</li>
+    </ul>
+  </div>
+
+  <!-- ------番茄鐘end------ -->
 
   <script src="script.js"></script>
 </body>

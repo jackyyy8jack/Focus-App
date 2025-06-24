@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { app, BrowserWindow, ipcMain } = require('electron');
+
+/* -------------------open app start------------------- */
 let win;
 
 app.on('ready', () => {
@@ -18,6 +20,11 @@ app.on('ready', () => {
     win.close();
   });
 });
+/* -------------------open app end------------------- */
+
+/* -------------------番茄鐘 start------------------- */
+/* -------------------番茄鐘 end------------------- */
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
