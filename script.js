@@ -5,50 +5,11 @@ function closeApp() {
 /* -------------------關閉程式end------------------- */
 
 
-/* -------------------番茄鐘start------------------- */
-
-function showTomato() {
-  document.getElementById('tomato-widget').style.display = 'block';
-  widget.style.left = '100px';
-  widget.style.top = '100px';
-}
-
-function hideTomato() {
-  document.getElementById('tomato-widget').style.display = 'none';
-}
-
-
-const widget = document.getElementById('tomato-widget');
-const handle = document.getElementById('drag-handle');
-
-let tomato_isDragging = false;
-let tomato_offsetX = 0;
-let tomato_offsetY = 0;
-
-handle.addEventListener('mousedown', (e) => {
-  tomato_isDragging = true;
-  tomato_offsetX = e.clientX - widget.offsetLeft;
-  tomato_offsetY = e.clientY - widget.offsetTop;
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (tomato_isDragging) {
-    widget.style.left = (e.clientX - tomato_offsetX) + 'px';
-    widget.style.top = (e.clientY - tomato_offsetY) + 'px';
-  }
-});
-
-document.addEventListener('mouseup', () => {
-  tomato_isDragging = false;
-});
-
-/* -------------------番茄鐘end------------------- */
-
 /* -------------------只有一個選單存在start------------------- */
 function closeAllMenus() {
   fadeOut();
   fadeOutClockMenu();
-  // 以後還可以 fadeOutMoreMenus();
+  fadeOutTomatoMenu();
 }
 /* -------------------只有一個選單存在end------------------- */
 
@@ -244,3 +205,296 @@ function resetClockPosition() {
 
 // ------時鐘右鍵選單end------
 /* -------------------時鐘end------------------- */
+
+
+
+/* -------------------番茄鐘start------------------- */
+
+
+
+
+function showTomato() {
+  document.getElementById('tomato-widget').style.display = 'block';
+  const collapseBall = document.getElementById('collapse-trigger');
+  collapseBall.style.display = 'block';
+  collapseBall.style.left = '108px';
+  collapseBall.style.top = '108px';
+  tomatoWidget.style.left = '100px';
+  tomatoWidget.style.top = '100px';
+}
+
+function hideTomato() {
+  document.getElementById('tomato-widget').style.display = 'none';
+  document.getElementById('collapse-trigger').style.display = 'none';
+}
+
+// ------番茄鐘拖曳start------
+
+
+
+const tomatoWidget = document.getElementById('tomato-widget');
+const handle = document.getElementById('drag-handle');
+
+let tomato_isDragging = false;
+let tomato_offsetX = 0;
+let tomato_offsetY = 0;
+
+handle.addEventListener('mousedown', (e) => {
+  if (e.button != 0) return;
+  tomato_isDragging = true;
+  tomato_offsetX = e.clientX - tomatoWidget.offsetLeft;
+  tomato_offsetY = e.clientY - tomatoWidget.offsetTop;
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (tomato_isDragging) {
+    const tomatoWidth = tomatoWidget.offsetWidth;
+    const tomatoHeight = tomatoWidget.offsetHeight;
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+    const snapMargin = 20;   //番茄鐘吸附畫面邊緣
+
+
+    let tomato_newLeft = e.clientX - tomato_offsetX;
+    let tomato_newTop = e.clientY - tomato_offsetY;
+
+   // 吸附左邊
+   if (tomato_newLeft < snapMargin) {
+    tomato_newLeft = 0;
+  }
+
+  // 吸附右邊
+  if (winWidth - (tomato_newLeft + tomatoWidth) < snapMargin) {
+    tomato_newLeft = winWidth - tomatoWidth;
+  }
+
+  // 吸附上邊
+  if (tomato_newTop < snapMargin) {
+    tomato_newTop = 0;
+  }
+
+  // 吸附下邊
+  if (winHeight - (tomato_newTop + tomatoHeight) < snapMargin) {
+    tomato_newTop = winHeight - tomatoHeight;
+  }
+
+    tomato_newLeft = Math.max(0, Math.min(winWidth - tomatoWidth, tomato_newLeft));
+    tomato_newTop = Math.max(0, Math.min(winHeight - tomatoHeight, tomato_newTop));
+
+    tomatoWidget.style.left = tomato_newLeft + "px";
+    tomatoWidget.style.top = tomato_newTop + 'px';
+    tomatoWidget.style.transformOrigin = `${collapseBall.offsetLeft - tomato_newLeft}px ${collapseBall.offsetTop - tomato_newTop}px`;
+    // tomatoWidget.style.transform = "none";
+
+    collapseBall.style.top = (tomato_newTop + 8) + 'px';
+    collapseBall.style.left = (tomato_newLeft + 8) + 'px';
+
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  tomato_isDragging = false;
+});
+
+
+
+// ------番茄鐘拖曳end------
+
+// ------番茄鐘功能start------
+
+let workDuration = 25 * 60; // 秒
+let restDuration = 5 * 60;  // 秒
+let remainingTime = workDuration;
+let isWorking = true;       // true: 工作階段, false: 休息
+let timer = null;
+
+function startTimer() {
+  if (timer) return;
+  timer = setInterval(() => {
+    if (remainingTime <= 0) {
+      clearInterval(timer);
+      timer = null;
+      isWorking = !isWorking;
+      remainingTime = isWorking ? workDuration : restDuration;
+      updatePhaseText();
+      startTimer(); // 自動切換並繼續
+    } else {
+      remainingTime--;
+      updateDisplay();
+    }
+  }, 1000);
+}
+
+function pauseTimer() {
+  clearInterval(timer);
+  timer = null;
+}
+
+function resetTimer() {
+  pauseTimer();
+  remainingTime = isWorking ? workDuration : restDuration;
+  updateDisplay();
+}
+
+function updateDisplay() {
+  const mm = String(Math.floor(remainingTime / 60)).padStart(2, '0');
+  const ss = String(remainingTime % 60).padStart(2, '0');
+  document.getElementById('timer-display').textContent = `${mm}:${ss}`;
+}
+
+function updatePhaseText() {
+  document.getElementById('tomato-phase').textContent = isWorking ? "工作中 🍅" : "休息中 💤";
+}
+
+function applySettings() {
+  const work = parseInt(document.getElementById('work-input').value);
+  const rest = parseInt(document.getElementById('rest-input').value);
+  workDuration = work * 60;
+  restDuration = rest * 60;
+  resetTimer();
+}
+
+
+// ------番茄鐘功能end------
+
+
+//------番茄鐘右鍵選單start------
+
+// 右鍵觸發選單
+const tomatoMenu = document.getElementById("tomato-menu");
+
+tomatoWidget.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  e.stopPropagation(); // 不讓事件冒泡觸發全域選單
+
+  // 如果已經顯示，就先淡出後打開
+  if (tomatoMenu.classList.contains("show")) {
+    fadeOutTomatoMenu(() => {
+      showTomatoMenuAt(e.clientX, e.clientY);
+    });
+  } else {
+    showTomatoMenuAt(e.clientX, e.clientY);
+  }
+});
+
+// 點擊畫面其他地方，關閉番茄鐘選單
+document.addEventListener("click", () => {
+  fadeOutTomatoMenu();
+});
+
+
+// 顯示番茄選單（含定位）
+function showTomatoMenuAt(x, y) {
+  closeAllMenus();
+
+  const tomatoMenuWidth = tomatoMenu.offsetWidth;
+  const tomatoMenuHeight = tomatoMenu.offsetHeight;
+
+  const rect = tomatoWidget.getBoundingClientRect();
+  const relativeX = x - rect.left;
+  const relativeY = y - rect.top;
+
+  const tomatoWinW = tomatoWidget.offsetWidth;
+  const tomatoWinH = tomatoWidget.offsetHeight;
+
+  // 清除位置
+  tomatoMenu.style.left = '';
+  tomatoMenu.style.top = '';
+  tomatoMenu.style.right = '';
+  tomatoMenu.style.bottom = '';
+
+  const tomatoUseRight = relativeX > tomatoWinW - tomatoMenuWidth;
+  const tomatoUseBottom = relativeY > tomatoWinH - tomatoMenuHeight;
+
+  if (tomatoUseRight) {
+    tomatoMenu.style.right = `${tomatoWinW - relativeX}px`;
+  } else {
+    tomatoMenu.style.left = `${relativeX}px`;
+  }
+
+  if (tomatoUseBottom) {
+    tomatoMenu.style.bottom = `${tomatoWinH - relativeY}px`;
+  } else {
+    tomatoMenu.style.top = `${relativeY}px`;
+  }
+
+  tomatoMenu.style.position = 'absolute';
+  tomatoWidget.appendChild(tomatoMenu);
+
+  tomatoMenu.classList.add("show");
+  tomatoMenu.classList.remove("hiding");
+}
+
+
+function fadeOutTomatoMenu(callback) {
+  if (!tomatoMenu.classList.contains("show")) return;
+  tomatoMenu.classList.remove("show");
+  tomatoMenu.classList.add("hiding");
+
+  setTimeout(() => {
+    tomatoMenu.classList.remove("hiding");
+    if (callback) callback();
+  }, 200);
+}
+
+function resetTomatoClockPosition(){
+  tomatoWidget.style.top = "100px";
+  tomatoWidget.style.left = "100px";
+}
+//------番茄鐘右鍵選單end------
+
+
+//------番茄鐘圓球start------
+
+const collapseBall = document.getElementById("collapse-trigger");
+
+let ballIsDragging = false;
+let ballOffsetX = 0;
+let ballOffsetY = 0;
+
+collapseBall.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return; // 限制只有左鍵可以拖曳
+  tomatoWidget.classList.add("collapsed");
+  ballIsDragging = true;
+  ballOffsetX = e.clientX - collapseBall.offsetLeft;
+  ballOffsetY = e.clientY - collapseBall.offsetTop;
+
+  //鎖定滑鼠捕捉
+  collapseBall.setPointerCapture(e.pointerId);
+});
+
+collapseBall.addEventListener("pointermove", (e) => {
+  if (ballIsDragging) {
+    const newBallLeft = e.clientX - ballOffsetX;
+    const newBallTop = e.clientY - ballOffsetY;
+
+    // 移動小球本身
+    collapseBall.style.left = newBallLeft + "px";
+    collapseBall.style.top = newBallTop + "px";
+
+    // 移動番茄鐘（偏移小球位置 8px）
+    tomatoWidget.style.left = (newBallLeft - 8) + "px";
+    tomatoWidget.style.top = (newBallTop - 8) + "px";
+  }
+});
+
+document.addEventListener("pointerup", () => {
+  ballIsDragging = false;
+  tomatoWidget.classList.remove("collapsed");
+});
+
+function resetTomatoClockPosition(){
+  tomatoWidget.style.top = "100px";
+  tomatoWidget.style.left = "100px";
+  collapseBall.style.top = "108px";
+  collapseBall.style.left = "108px";
+}
+
+//------番茄鐘圓球end------
+
+
+/* -------------------番茄鐘end------------------- */
+
+
+
+

@@ -22,29 +22,46 @@
     <div class="colon">:</div>
     <div id="minute" class="minute">00</div>
   </div>
-
-  <div id="clock-menu" class="context-menu">   <!-- 時鐘右鍵選單 -->
+  <!--時鐘右鍵選單start-->
+  <div id="clock-menu" class="context-menu">
     <ul>
       <li onclick="resetClockPosition()">回復預設位置 🔄</li>
     </ul>
   </div>
+  <!--時鐘右鍵選單end-->
 
   <!-- ------時鐘end------ -->
 
   <!-- ------番茄鐘start------ -->
+  <div id = "collapse-trigger" class = "collapse-ball"></div>
   <div id="tomato-widget" class="widget">
-    <div class="widget-header" id="drag-handle">番茄鐘 🍅</div>
-    <div class="widget-body" id="timer">25:00</div>
-    <button onclick="startTimer()">開始</button>
-    <button onclick="hideTomato()">關閉</button>
-  </div>
 
-  <div id="tomato-menu" class="context-menu">   <!-- 番茄鐘右鍵選單 -->
-    <ul>
-      <li onclick="resetClockPosition()">回復預設位置 🔄</li>
-    </ul>
-  </div>
+    <div id="tomato-menu" class="context-menu">   <!-- 番茄鐘右鍵選單 -->
+      <ul>
+        <li onclick="resetTomatoClockPosition()">回復預設位置 🔄</li>
+        <li onclick="hideTomato()">關閉番茄鐘 ❌</li>
+      </ul>
+    </div>
 
+    <div id="drag-handle" class="widget-header">番茄鐘 🍅</div>
+
+    <div class="widget-body" id = "tomato-content">
+      <div id="tomato-phase">工作中 🍅</div>
+      <div id="timer-display">25:00</div>
+    
+      <div>
+        <button onclick="startTimer()">開始</button>
+        <button onclick="pauseTimer()">暫停</button>
+        <button onclick="resetTimer()">重設</button>
+      </div>
+    
+      <div>
+        <label>工作: <input type="number" id="work-input" value="25" min="1"></label>
+        <label>休息: <input type="number" id="rest-input" value="5" min="1"></label>
+        <button onclick="applySettings()">套用</button>
+      </div>
+    </div>
+  </div>
   <!-- ------番茄鐘end------ -->
 
   <script src="script.js"></script>
