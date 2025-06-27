@@ -33,12 +33,13 @@
   <!-- ------時鐘end------ -->
 
   <!-- ------番茄鐘start------ -->
-  <div id = "collapse-trigger" class = "collapse-ball"></div>
   <div id="tomato-widget" class="widget">
 
     <div id="tomato-menu" class="context-menu">   <!-- 番茄鐘右鍵選單 -->
       <ul>
         <li onclick="resetTomatoClockPosition()">回復預設位置 🔄</li>
+        <li id="snap-to-edge-btn" onclick="snapTomatoToEdge()">吸附至邊緣 📌</li>
+        <li id="toggle-minimize-btn" onclick="minimizeTomato()">縮小番茄鐘 🕛</li>
         <li onclick="hideTomato()">關閉番茄鐘 ❌</li>
       </ul>
     </div>
@@ -49,13 +50,13 @@
       <div id="tomato-phase">工作中 🍅</div>
       <div id="timer-display">25:00</div>
     
-      <div>
+      <div class="tomato-controls">
         <button onclick="startTimer()">開始</button>
         <button onclick="pauseTimer()">暫停</button>
         <button onclick="resetTimer()">重設</button>
       </div>
     
-      <div>
+      <div class="tomato-settings">
         <label>工作: <input type="number" id="work-input" value="25" min="1"></label>
         <label>休息: <input type="number" id="rest-input" value="5" min="1"></label>
         <button onclick="applySettings()">套用</button>
