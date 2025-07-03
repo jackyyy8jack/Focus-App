@@ -1,9 +1,12 @@
 body {
-  font-family: Arial, sans-serif;
+  font-family: 'Lexend', sans-serif;
+  /* font-family: Arial, sans-serif; */
   height: 100%;
   margin: 0;
+  padding: 0;
   background-color:#6850bd31;
   user-select: none;
+  overflow: hidden;
 } 
 
 /* -------------------右鍵選單start------------------- */
@@ -87,18 +90,21 @@ body {
 
 /* -------------------番茄鐘start------------------- */
 .widget {
-  display:none;
-  position:absolute;
+  display: none;
+  position: absolute;
   top: 100px;
   left: 100px;
-  width: 500px;
+  width: 450px;
   height: 350px;
+  border-radius: 20px;
   background: #f05d5d56;
-  color: white;
-  border-radius: 12px;
-  box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  color: #ffffff;
   user-select: none;
   z-index: 9999;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 #tomato-widget{
@@ -124,17 +130,101 @@ body {
 }
 
 .widget-header {
+  font-size: 20px;
+  /* line-height: 1; */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  height: 11%;
   background: #d943436e;
-  padding: 8px;
+  /* padding: 8px; */
   cursor: pointer;
   border-radius: 11px 11px 0 0;
   font-weight: bold;
   text-align: center;
+  padding: 0 12px;
+  box-sizing: border-box;
 }
 
 .widget-body {
-  padding: 12px;
-  font-size: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 89%;
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  flex: 1;
+  font-size: 20px;
+  text-align: center;
+}
+
+#timer-display {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: clamp(24px, 10vw, 80px);
+  font-weight: bold;
+  line-height: 1;
+}
+
+#tomato-widget.minimized #timer-display{
+  font-size: 32px;
+}
+
+.tomato-controls {
+  display: flex;
+  flex-direction: row;      /* 水平排列 */
+  justify-content: center;
+  flex-wrap: wrap;          /* 行滿則換行 */
+  gap: 12px;                /* 按鈕間距 */
+  margin: 12px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tomato-settings {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+.tomato-controls button,
+.tomato-settings button {
+  max-width: 30%;
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  margin: 4px;
+  padding: 6px 16px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+.tomato-controls button:hover,
+.tomato-settings button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.tomato-settings input {
+  width: 50px;
+  padding: 4px;
+  margin-left: 6px;
+  border-radius: 6px;
+  border: none;
   text-align: center;
 }
 
@@ -142,11 +232,12 @@ body {
 /* -----------番茄鐘右鍵start----------- */
 #tomato-menu {
   position: absolute;
-  z-index: 10000;
+  z-index: 9999;
   opacity: 0;
   transform: scale(0.95);
   transition: opacity 0.2s ease, transform 0.2s ease;
   pointer-events: none;
+  isolation: isolate;
 }
 
 #tomato-menu.show {
@@ -170,10 +261,43 @@ body {
 #tomato-widget.minimized {
   width: 160px;
   height: auto;
-  font-size: 18px;
+  font-size: 18px;  
+  z-index: 998;
+}
+
+#tomato-widget.minimized .widget-header {
+  display: none;
+}
+
+#tomato-icon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  cursor: grab;
+  user-select: none;
+  z-index: 999;
+}
+
+#tomato-widget.hovered {
+  display: block;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 
 /* -----------縮小番茄鐘end----------- */
 
+
+/* -----------縮放番茄鐘start----------- */
+.resize-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+  z-index: 10000;
+}
+
+/* -----------縮放番茄鐘end----------- */
 /* -------------------番茄鐘end------------------- */
 

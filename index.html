@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;700&display=swap" rel="stylesheet">
   <meta charset="UTF-8">
   <title>Focus App</title>
   <link rel="stylesheet" href="styles.css">
@@ -33,12 +34,13 @@
   <!-- ------時鐘end------ -->
 
   <!-- ------番茄鐘start------ -->
+  <img id="tomato-icon" src="./tomato.png" alt="番茄圖示" style="display: none; " draggable="false">
   <div id="tomato-widget" class="widget">
 
     <div id="tomato-menu" class="context-menu">   <!-- 番茄鐘右鍵選單 -->
       <ul>
         <li onclick="resetTomatoClockPosition()">回復預設位置 🔄</li>
-        <li id="snap-to-edge-btn" onclick="snapTomatoToEdge()">吸附至邊緣 📌</li>
+        <!-- <li id="snap-to-edge-btn" onclick="snapTomatoToEdge()">吸附至邊緣 📌</li> -->
         <li id="toggle-minimize-btn" onclick="minimizeTomato()">縮小番茄鐘 🕛</li>
         <li onclick="hideTomato()">關閉番茄鐘 ❌</li>
       </ul>
@@ -57,11 +59,12 @@
       </div>
     
       <div class="tomato-settings">
-        <label>工作: <input type="number" id="work-input" value="25" min="1"></label>
-        <label>休息: <input type="number" id="rest-input" value="5" min="1"></label>
+        <label>工作: <input type="number" id="work-input" value="25" min="1" step = '1'></label>
+        <label>休息: <input type="number" id="rest-input" value="5" min="1" step = '1'></label>
         <button onclick="applySettings()">套用</button>
       </div>
     </div>
+    <div id="resize-handle" class="resize-handle"></div>
   </div>
   <!-- ------番茄鐘end------ -->
 
