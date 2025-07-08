@@ -319,10 +319,11 @@ function resetTimer() {  //重製計時器
   updateDisplay();
 }
 
-function updateDisplay() {  //計時器時間設定
-  const mm = String(Math.floor(remainingTime / 60)).padStart(2, '0');
+function updateDisplay() {  //計時器時間設置
+  const hh = String(Math.floor(remainingTime / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((remainingTime % 3600) / 60)).padStart(2, '0');
   const ss = String(remainingTime % 60).padStart(2, '0');
-  document.getElementById('timer-display').textContent = `${mm}:${ss}`;
+  document.getElementById('timer-display').textContent = `${hh}:${mm}:${ss}`;
 }
 
 function updatePhaseText() {  //顯示工作or休息
@@ -707,5 +708,53 @@ document.addEventListener('mouseup', () => {
 /* -------------------番茄鐘end------------------- */
 
 
+/* -------------------碼表start------------------- */
+let stopwatchTimer = null;
+let stopwatchSeconds = 0;
+const stopwatchDisplay = document.getElementById("stopwatch-display");
 
+function showStopwatch() {
+  const widget = document.getElementById("stopwatch-widget");
+  widget.style.display = "block";
+  requestAnimationFrame(() => {
+    widget.classList.add("show");
+  });
+}
 
+function hideStopwatch() {
+  const widget = document.getElementById("stopwatch-widget");
+  widget.classList.remove("show");
+  widget.classList.add("hide");
+  setTimeout(() => {
+    widget.classList.remove("hide");
+    widget.style.display = "none";
+  }, 300);
+}
+
+function startStopwatch() {
+  if (stopwatchTimer) return;
+  stopwatchTimer = setInterval(() => {
+    stopwatchSeconds++;
+    updateStopwatchDisplay();
+  }, 1000);
+}
+
+function pauseStopwatch() {
+  clearInterval(stopwatchTimer);
+  stopwatchTimer = null;
+}
+
+function resetStopwatch() {
+  pauseStopwatch();
+  stopwatchSeconds = 0;
+  updateStopwatchDisplay();
+}
+
+function updateStopwatchDisplay() {
+  const hh = String(Math.floor(remainingTime / 3600)).padStart(2, "0");
+  const mm = String(Math.floor(stopwatchSeconds / 60)).padStart(2, "0");
+  const ss = String(stopwatchSeconds % 60).padStart(2, "0");
+  stopwatchDisplay.textContent = `${hh}:${mm}:${ss}`;
+}
+
+/* -------------------碼表end------------------- */

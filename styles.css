@@ -301,3 +301,43 @@ body {
 /* -----------縮放番茄鐘end----------- */
 /* -------------------番茄鐘end------------------- */
 
+
+/* -------------------碼表start------------------- */
+
+#stopwatch-widget {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  position: absolute;
+  top: 150px;
+  left: 150px;
+}
+
+#stopwatch-widget.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+#stopwatch-widget.hide {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+}
+
+#stopwatch-widget.minimized .tomato-controls {
+  display: none;
+}
+#stopwatch-widget.minimized .widget-header {
+  display: none;
+}
+#stopwatch-icon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  cursor: grab;
+  z-index: 999;
+}
+
+
+/* -------------------碼表end------------------- */
