@@ -348,7 +348,7 @@ function applySettings() {  //套用設定
 const tomatoMenu = document.getElementById("tomato-menu");
 
 tomatoWidget.addEventListener("contextmenu", function (e) {
-  const tomatoWidget = document.getElementById('tomato-widget');
+  // const tomatoWidget = document.getElementById('tomato-widget');
   const tomatoIcon = document.getElementById('tomato-icon');
 
   // 如果點擊的是縮小番茄鐘或圖示，就完全阻止右鍵
@@ -585,8 +585,10 @@ function minimizeTomato() {
   document.addEventListener('mouseup', () => {
     tomatoIcon_isDragging = false;
   });
+
+  //------縮小番茄鐘圖標拖曳end------
 }
-//------縮小番茄鐘圖標拖曳end------
+//------縮小番茄鐘end------
 
 //------雙擊縮小、放大番茄鐘start------
 
@@ -657,7 +659,6 @@ document.getElementById('apply-btn').addEventListener('click', () => {
 
 //------番茄鐘輸入限制end------
 
-//------縮小番茄鐘end------
 
 
 
@@ -691,7 +692,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('mouseup', () => {
-  const rect = tomatoWidget.getBoundingClientRect();
+  // const rect = tomatoWidget.getBoundingClientRect();
   originalTomatoSize.width = tomatoWidget.style.width;
   originalTomatoSize.height = tomatoWidget.style.height;
   isResizing = false;
@@ -731,7 +732,59 @@ function hideStopwatch() {
   }, 300);
 }
 
-function startStopwatch() {
+
+
+// ------碼表拖曳start------
+
+
+
+const stopwatchWidget = document.getElementById('stopwatch-widget');
+const stopwatchdrag = document.getElementById('stopwatch-drag');
+const stopwatchIcon = document.getElementById('stopwatch-icon');
+
+let stopwatch_isDragging = false;
+let stopwatch_offsetX = 0;
+let stopwatch_offsetY = 0;
+
+stopwatchdrag.addEventListener('mousedown', (e) => {
+  if (e.button != 0) return;
+  stopwatch_isDragging = true;
+  stopwatch_offsetX = e.clientX - stopwatchWidget.offsetLeft;
+  stopwatch_offsetY = e.clientY - stopwatchWidget.offsetTop;
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (stopwatch_isDragging) {
+    const stopwatchWidth = stopwatchWidget.offsetWidth;
+    const stopwatchHeight = stopwatchWidget.offsetHeight;
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+
+
+    let stopwatch_newLeft = e.clientX - stopwatch_offsetX;
+    let stopwatch_newTop = e.clientY - stopwatch_offsetY;
+
+
+    stopwatch_newLeft = Math.max(0, Math.min(winWidth - stopwatchWidth, stopwatch_newLeft));
+    stopwatch_newTop = Math.max(0, Math.min(winHeight - stopwatchHeight, stopwatch_newTop));
+
+    stopwatchWidget.style.left = stopwatch_newLeft + "px";
+    stopwatchWidget.style.top = stopwatch_newTop + 'px';
+    // stopwatchWidget.style.transform = "none";
+
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  stopwatch_isDragging = false;
+});
+
+
+
+// ------碼表拖曳end------
+
+// ------碼表功能start------
+function startStopwatch() {  //開始碼表
   if (stopwatchTimer) return;
   stopwatchTimer = setInterval(() => {
     stopwatchSeconds++;
@@ -739,22 +792,362 @@ function startStopwatch() {
   }, 1000);
 }
 
-function pauseStopwatch() {
+function pauseStopwatch() {  //暫停碼表
   clearInterval(stopwatchTimer);
   stopwatchTimer = null;
 }
 
-function resetStopwatch() {
+function resetStopwatch() {  //重設碼表
   pauseStopwatch();
   stopwatchSeconds = 0;
   updateStopwatchDisplay();
 }
 
-function updateStopwatchDisplay() {
+function updateStopwatchDisplay() {  //碼表時間設置
   const hh = String(Math.floor(remainingTime / 3600)).padStart(2, "0");
   const mm = String(Math.floor(stopwatchSeconds / 60)).padStart(2, "0");
   const ss = String(stopwatchSeconds % 60).padStart(2, "0");
   stopwatchDisplay.textContent = `${hh}:${mm}:${ss}`;
 }
 
+// ------碼表功能end------
+
+
+//------碼表右鍵選單start------
+
+// 右鍵觸發選單
+const stopwatchMenu = document.getElementById("stopwatch-menu");
+
+stopwatchWidget.addEventListener("contextmenu", function (e) {
+  // const stopwatchWidget = document.getElementById('stopwatch-widget');
+  const stopwatchIcon = document.getElementById('stopwatch-icon');
+
+  // 如果點擊的是縮小碼表或圖示，就完全阻止右鍵
+  if (
+    stopwatchWidget.classList.contains('minimized') &&
+    (stopwatchWidget.contains(e.target) || stopwatchIcon.contains(e.target))
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation(); // 不讓事件冒泡觸發全域選單
+
+  // 如果已經顯示，就先淡出後打開
+  if (stopwatchMenu.classList.contains("show")) {
+    fadeOutstopwatchMenu(() => {
+      showstopwatchMenuAt(e.clientX, e.clientY);
+    });
+  } else {
+    showstopwatchMenuAt(e.clientX, e.clientY);
+  }
+});
+
+// 點擊畫面其他地方，關閉碼表選單
+document.addEventListener("click", () => {
+  fadeOutstopwatchMenu();
+});
+
+
+// 顯示碼表選單（含定位）
+function showstopwatchMenuAt(x, y) {
+  closeAllMenus();
+
+  const stopwatchMenuWidth = stopwatchMenu.offsetWidth;
+  const stopwatchMenuHeight = stopwatchMenu.offsetHeight;
+
+  const rect = stopwatchWidget.getBoundingClientRect();
+  const relativeX = x - rect.left;
+  const relativeY = y - rect.top;
+
+  const stopwatchWinW = stopwatchWidget.offsetWidth;
+  const stopwatchWinH = stopwatchWidget.offsetHeight;
+
+  const widget = document.getElementById("stopwatch-widget");
+  const toggleBtn = document.getElementById("toggle-minimize-btn");
+
+  const isMinimized = stopwatchWidget.classList.contains('minimized');
+  // const snapBtn = document.getElementById('snap-to-edge-btn');
+
+  const draghandle = document.getElementById('drag-handle');
+  const stopwatchIcon = document.getElementById('stopwatch-icon');
+
+  // 清除位置
+  stopwatchMenu.style.left = '';
+  stopwatchMenu.style.top = ''; 
+  stopwatchMenu.style.right = '';
+  stopwatchMenu.style.bottom = '';
+
+  const stopwatchUseRight = relativeX > stopwatchWinW - stopwatchMenuWidth;
+  const stopwatchUseBottom = relativeY > stopwatchWinH - stopwatchMenuHeight;
+
+  if (stopwatchUseRight) {
+    stopwatchMenu.style.right = `${stopwatchWinW - relativeX}px`;
+  } else {
+    stopwatchMenu.style.left = `${relativeX}px`;
+  }
+
+  if (stopwatchUseBottom) {
+    stopwatchMenu.style.bottom = `${stopwatchWinH - relativeY}px`;
+  } else {
+    stopwatchMenu.style.top = `${relativeY}px`;
+  }
+
+  stopwatchMenu.style.position = 'absolute';
+
+  stopwatchMenu.classList.add("show");
+  stopwatchMenu.classList.remove("hiding");
+
+
+  if (widget.classList.contains("minimized")) {
+    toggleBtn.textContent = "放大番茄鐘 🔍";
+    // draghandle.style.display = 'block';
+    widget.style.display = 'block';
+    // stopwatchIcon.style.display = 'none';
+    hideOnLeaveEanbled = true;
+  } else {
+    toggleBtn.textContent = "縮小番茄鐘 🕛";
+  }
+
+}
+
+
+function fadeOutstopwatchMenu(callback) {
+  if (!stopwatchMenu.classList.contains("show")) return;
+  stopwatchMenu.classList.remove("show");
+  stopwatchMenu.classList.add("hiding");
+
+  setTimeout(() => {
+    stopwatchMenu.classList.remove("hiding");
+    if (callback) callback();
+  }, 100);
+}
+
+function resetstopwatchClockPosition(){
+  stopwatchWidget.style.top = "100px";
+  stopwatchWidget.style.left = "100px";
+}
+//------碼表右鍵選單end------
+
+//------縮小碼表start------
+document.getElementById('stopwatch-icon').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+function minimizeStopwatch() {
+  const widget = document.getElementById('stopwatch-widget');
+  const stopwatchIcon = document.getElementById('stopwatch-icon');
+  const stopwatchdrag = document.getElementById('stopwatch-drag');
+  const isNowMinimized = widget.classList.toggle('minimized');
+  const rect = widget.getBoundingClientRect();
+  
+  let stopwatchIcon_isDragging = false;
+  
+
+
+  hideOnLeaveEanbled = isNowMinimized;
+
+  if (isNowMinimized) {
+
+    widget.classList.add('minimized');
+    widget.style.removeProperty("width");
+    widget.style.removeProperty("height");
+    // const rect = widget.getBoundingClientRect();
+    stopwatchIcon.style.display = 'block';
+    stopwatchIcon.style.left = rect.left - stopwatchIcon.offsetWidth / 2 + "px";
+    stopwatchIcon.style.top = rect.top - stopwatchIcon.offsetHeight / 2 + "px";
+    stopwatchdrag.style.display = "";
+    widget.style.display = "none";
+  } else {
+    widget.classList.remove('minimized');
+    stopwatchIcon.style.display = 'none';
+    stopwatchdrag.style.display = "block";
+    widget.style.display = "block";
+    
+
+    // 修正 stopwatch-widget 避免超出螢幕
+    requestAnimationFrame(() => {
+      const rect = widget.getBoundingClientRect();
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+
+      let left = parseFloat(widget.style.left) || rect.left;
+      let top = parseFloat(widget.style.top) || rect.top;
+
+      if (rect.right > winW) {
+        left -= (rect.right - winW);
+      }
+      if (rect.bottom > winH) {
+        top -= (rect.bottom - winH);
+      }
+      if (left < 0) left = 0;
+      if (top < 0) top = 0;
+
+      widget.style.left = left + "px";
+      widget.style.top = top + "px";
+
+      
+
+    });
+  }
+  
+  stopwatchIcon.addEventListener('mouseenter', () => {
+    if (stopwatchIcon_isDragging) return;
+    widget.style.display = "block";
+  });
+  stopwatchIcon.addEventListener('mouseleave', () => {
+    if (!hideOnLeaveEanbled || stopwatchIcon_isDragging) return;
+    setTimeout(() => {
+      if (!widget.matches(':hover') && !stopwatchIcon.matches(':hover')) {
+        widget.style.display = "none";
+      }
+    }, 100);
+  });
+  widget.addEventListener('mouseleave', () => {
+    if (!hideOnLeaveEanbled || stopwatchIcon_isDragging) return;
+    setTimeout(() => {
+      if (!widget.matches(':hover') && !stopwatchIcon.matches(':hover')) {
+        widget.style.display = "none";
+      }
+    }, 100);
+  });
+  
+   
+  
+
+  //------縮小碼表圖標拖曳start------
+  
+  let stopwatchIcon_offsetX = 0;
+  let stopwatchIcon_offsetY = 0;
+
+  stopwatchIcon.addEventListener('mousedown', (e) =>{
+    if (e.button != 0) return;
+    stopwatchIcon_isDragging = true;
+    stopwatchIcon_offsetX = e.clientX - stopwatchIcon.offsetLeft;
+    stopwatchIcon_offsetY = e.clientY - stopwatchIcon.offsetTop;
+    
+  });
+  
+  document.addEventListener('mousemove', (e) =>{
+    if (stopwatchIcon_isDragging){
+      const stopwatchIconWidth = widget.offsetWidth;
+      const stopwatchIconHeight = widget.offsetHeight;
+      const winWidth = window.innerWidth;
+      const winHeight = window.innerHeight;
+
+      let stopwatchIcon_newLeft = e.clientX - (stopwatchIcon_offsetX - stopwatchIcon.offsetWidth / 2);
+      let stopwatchIcon_newTop = e.clientY - (stopwatchIcon_offsetY - stopwatchIcon.offsetHeight / 2);
+
+
+      stopwatchIcon_newLeft = Math.max(0, Math.min(winWidth - stopwatchIconWidth, stopwatchIcon_newLeft));
+      stopwatchIcon_newTop = Math.max(0, Math.min(winHeight - stopwatchIconHeight, stopwatchIcon_newTop));
+
+      stopwatchIcon.style.left = stopwatchIcon_newLeft - stopwatchIcon.offsetWidth / 2 + "px";
+      stopwatchIcon.style.top = stopwatchIcon_newTop - stopwatchIcon.offsetHeight / 2 + "px";
+      widget.style.left = stopwatchIcon_newLeft + "px";
+      widget.style.top = stopwatchIcon_newTop + "px";
+
+      widget.style.display = "none";
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    stopwatchIcon_isDragging = false;
+  });
+
+  //------縮小碼表圖標拖曳end------
+}
+//------縮小碼表end------
+
+//------雙擊縮小、放大碼表start------
+
+stopwatchIcon.addEventListener('dblclick', () => {
+  stopwatchWidget.classList.remove('minimized');
+  const sizeToRestore = rememberedSizeBeforeMinimize || originalstopwatchSize;
+
+  stopwatchWidget.style.width = sizeToRestore.width + "px";
+  stopwatchWidget.style.height = sizeToRestore.height + "px";
+
+  stopwatchWidget.style.display = 'block';
+  stopwatchIcon.style.display = 'none';
+  stopwatchdrag.style.display = 'block';
+  stopwatchdrag.style.display = "flex";
+  hideOnLeaveEanbled = false;
+
+  //修正放大後超出視窗
+  requestAnimationFrame(() => {
+    const rect = stopwatchWidget.getBoundingClientRect();
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    let left = parseFloat(stopwatchWidget.style.left) || rect.left;
+    let top = parseFloat(stopwatchWidget.style.top) || rect.top;
+
+    if (rect.right > winW) {
+      left -= (rect.right - winW);
+    }
+    if (rect.bottom > winH) {
+      top -= (rect.bottom - winH);
+    }
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+
+    stopwatchWidget.style.left = left + "px";
+    stopwatchWidget.style.top = top + "px";
+  });
+});
+
+stopwatchdrag.addEventListener('dblclick', () => {
+  const rect = stopwatchWidget.getBoundingClientRect();
+    rememberedSizeBeforeMinimize = {
+      width: rect.width,
+      height: rect.height
+    };
+  minimizeStopwatch();
+});
+//------雙擊縮小、放大碼表end------
+
+
+
+//------縮放碼表start------
+
+const stopwatchResize = document.getElementById('stopwatch-resize');
+
+let stopwatchIsResizing = false;
+let stopwatchStartX, stopwatchStartY, stopwatchStartWidth, stopwatchStartHeight;
+
+stopwatchResize.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  stopwatchIsResizing = true;
+  stopwatchStartX = e.clientX;
+  stopwatchStartY = e.clientY;
+  stopwatchStartWidth = stopwatchWidget.offsetWidth;
+  stopwatchStartHeight = stopwatchWidget.offsetHeight;
+
+  
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!stopwatchIsResizing) return;
+
+  const stopwatchNewWidth = Math.max(346, stopwatchStartWidth + (e.clientX - stopwatchStartX));
+  const stopwatchNewHeight = Math.max(263, stopwatchStartHeight + (e.clientY - stopwatchStartY));
+
+  stopwatchWidget.style.width = `${stopwatchNewWidth}px`;
+  stopwatchWidget.style.height = `${stopwatchNewHeight}px`;
+});
+
+document.addEventListener('mouseup', () => {
+  // const rect = tomatoWidget.getBoundingClientRect();
+  originalTomatoSize.width = tomatoWidget.style.width;
+  originalTomatoSize.height = tomatoWidget.style.height;
+  isResizing = false;
+});
+
+
+
+//------縮放碼表end------
 /* -------------------碼表end------------------- */

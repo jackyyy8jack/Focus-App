@@ -96,8 +96,8 @@ body {
   left: 100px;
   width: 450px;
   height: 350px;
+  background:#f05d5d48;
   border-radius: 20px;
-  background: #f05d5d56;
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
@@ -304,6 +304,24 @@ body {
 
 /* -------------------碼表start------------------- */
 
+.stopwatch-widget {
+  display: none;
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 450px;
+  height: 350px;
+  background:rgba(182, 29, 182, 0.28);
+  border-radius: 20px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  color: #ffffff;
+  user-select: none;
+  z-index: 9999;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
 #stopwatch-widget {
   opacity: 0;
   transform: scale(0.8);
@@ -325,6 +343,24 @@ body {
   pointer-events: none;
 }
 
+#stopwatch-drag {
+  background-color: rgba(128, 0, 128, 0.43);
+}
+
+.stopwatch-widget-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 89%;
+  width: 100%;
+  padding: 8px;
+  border-radius: 0 0 20 20px;
+  box-sizing: border-box;
+  flex: 1;
+  font-size: 20px;
+  text-align: center;
+}
+
 #stopwatch-widget.minimized .tomato-controls {
   display: none;
 }
@@ -339,5 +375,36 @@ body {
   z-index: 999;
 }
 
+/* -----------縮小碼表start----------- */
+#stopwatch-widget.minimized .stopwatch-controls {
+  display: none;
+}
 
+#stopwatch-widget.minimized {
+  width: 160px;
+  height: auto;
+  font-size: 18px;  
+  z-index: 998;
+}
+
+#stopwatch-widget.minimized .widget-header {
+  display: none;
+}
+
+#stopwatch-icon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  cursor: grab;
+  user-select: none;
+  z-index: 999;
+}
+
+#stopwatch-widget.hovered {
+  display: block;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+/* -----------縮小碼表end----------- */
 /* -------------------碼表end------------------- */

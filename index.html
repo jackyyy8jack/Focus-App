@@ -71,7 +71,8 @@
   <!-- ------番茄鐘end------ -->
 
   <!-- ------碼表start------ -->
-  <div id="stopwatch-widget" class="widget">
+  <img id="stopwatch-icon" src="./stopwatch.png" alt="碼表圖示" style="display: none; " draggable="false">
+  <div id="stopwatch-widget" class="stopwatch-widget">
     <div id="stopwatch-menu" class="context-menu">
       <ul>
         <li onclick="resetStopwatchPosition()">回復預設位置 🔄</li>
@@ -82,11 +83,11 @@
   
     <div id="stopwatch-drag" class="widget-header">碼表 ⏱️</div>
   
-    <div class="widget-body" id="stopwatch-content">
+    <div class="stopwatch-widget-body" id="stopwatch-content">
       <div id="stopwatch-phase">計時中 ⏱️</div>
       <div id="stopwatch-display">00:00:00</div>
   
-      <div class="tomato-controls">
+      <div class="stopwatch-controls">
         <button onclick="startStopwatch()">開始</button>
         <button onclick="pauseStopwatch()">暫停</button>
         <button onclick="resetStopwatch()">重設</button>
