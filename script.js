@@ -1156,7 +1156,7 @@ document.addEventListener('mouseup', () => {
 /* =================== YouTube 背景影片(beta)start =================== */
 (function initYouTubeBg() {
   // 你指定的影片：https://www.youtube.com/watch?v=jfKfPfyJRdk
-  const VIDEO_ID = "jfKfPfyJRdk";
+  const VIDEO_ID = "qwdzIECTqn8";
 
   // 如果頁面沒有 player 容器就不做（避免日後你拆頁面時爆掉）
   if (!document.getElementById("player")) return;
