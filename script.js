@@ -1151,3 +1151,53 @@ document.addEventListener('mouseup', () => {
 
 //------縮放碼表end------
 /* -------------------碼表end------------------- */
+
+
+/* =================== YouTube 背景影片(beta)start =================== */
+(function initYouTubeBg() {
+  // 你指定的影片：https://www.youtube.com/watch?v=jfKfPfyJRdk
+  const VIDEO_ID = "jfKfPfyJRdk";
+
+  // 如果頁面沒有 player 容器就不做（避免日後你拆頁面時爆掉）
+  if (!document.getElementById("player")) return;
+
+  // 載入 YouTube IFrame API
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  // YouTube API 需要全域 callback
+  window.onYouTubeIframeAPIReady = function () {
+    // eslint-disable-next-line no-undef
+    const player = new YT.Player("player", {
+      videoId: VIDEO_ID,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        mute: 1,             // 很重要：不靜音通常會被瀏覽器擋自動播放
+        loop: 1,
+        playlist: VIDEO_ID,  // loop 單曲循環必須搭配 playlist
+        playsinline: 1,
+        rel: 0,
+        modestbranding: 1
+      },
+      events: {
+        onReady: (e) => {
+          // 確保能播
+          e.target.mute();
+          e.target.playVideo();
+        },
+        onStateChange: (e) => {
+          // 有些情況會停住，保險起見補一下
+          // eslint-disable-next-line no-undef
+          if (e.data === YT.PlayerState.ENDED) e.target.playVideo();
+        }
+      }
+    });
+
+    // 如果你之後想做音量控制，可以把 player 存在 window 上
+    window._bgPlayer = player;
+  };
+})();
+/* ===== YouTube 背景影片(beta)end ===== */
+
