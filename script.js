@@ -5,11 +5,99 @@ function closeApp() {
 /* -------------------關閉程式end------------------- */
 
 
+/* =================== 提示音效 start =================== */
+// 番茄鐘 / 計時器結束時的鈴聲。兩者可分開開關，且最多只響 RING_SECONDS 秒。
+const RING_SECONDS = 5;                 // 最多響幾秒（避免一直響）
+const soundSettings = {
+  tomato: localStorage.getItem("focus-sound-tomato") !== "off",
+  timer: localStorage.getItem("focus-sound-timer") !== "off",
+};
+const SOUND_TARGET = {
+  bell: "tomato",
+  alarm: "timer",
+};
+
+const SOUNDS = {
+  bell:  new Audio("sounds/bell.ogg"),   // 番茄鐘階段結束
+  alarm: new Audio("sounds/alarm.ogg"),  // 計時器倒數結束
+};
+Object.values(SOUNDS).forEach(a => { a.preload = "auto"; a.volume = 0.8; });
+
+let _ringStopTimer = null;
+
+function playSound(name) {
+  const target = SOUND_TARGET[name];
+  if (target && !soundSettings[target]) return;
+  const a = SOUNDS[name];
+  if (!a) { beepFallback(); return; }
+  try {
+    clearTimeout(_ringStopTimer);
+    a.pause();
+    a.currentTime = 0;
+    const p = a.play();
+    if (p && p.catch) p.catch(() => beepFallback());
+    // 最多響 RING_SECONDS 秒就自動停
+    _ringStopTimer = setTimeout(() => { try { a.pause(); a.currentTime = 0; } catch (_) {} }, RING_SECONDS * 1000);
+  } catch (_) {
+    beepFallback();
+  }
+}
+
+function stopSound() {
+  clearTimeout(_ringStopTimer);
+  Object.values(SOUNDS).forEach(a => { try { a.pause(); a.currentTime = 0; } catch (_) {} });
+}
+
+function setSoundEnabled(target, on) {
+  soundSettings[target] = !!on;
+  localStorage.setItem(`focus-sound-${target}`, soundSettings[target] ? "on" : "off");
+  if (!soundSettings[target]) stopSound();
+}
+
+// 找不到音檔時的備援提示音（用 Web Audio 合成嗶聲）
+function beepFallback() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let t = ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.26);
+      t += 0.35;
+    }
+    setTimeout(() => ctx.close(), 1500);
+  } catch (_) { /* 不支援就略過 */ }
+}
+
+// DOM 載入後分別綁定番茄鐘 / 計時器音效開關，並套用記住的狀態
+document.addEventListener("DOMContentLoaded", () => {
+  const tomatoSound = document.getElementById("tomato-sound");
+  const timerSound = document.getElementById("timer-sound");
+  if (tomatoSound) {
+    tomatoSound.checked = soundSettings.tomato;
+    tomatoSound.addEventListener("change", () => setSoundEnabled("tomato", tomatoSound.checked));
+  }
+  if (timerSound) {
+    timerSound.checked = soundSettings.timer;
+    timerSound.addEventListener("change", () => setSoundEnabled("timer", timerSound.checked));
+  }
+});
+/* =================== 提示音效 end =================== */
+
+
 /* -------------------只有一個選單存在start------------------- */
 function closeAllMenus() {
   fadeOut();
   fadeOutClockMenu();
   fadeOutTomatoMenu();
+  fadeOutSettingsPanel();
 }
 /* -------------------只有一個選單存在end------------------- */
 
@@ -18,6 +106,7 @@ function closeAllMenus() {
 // 右鍵觸發選單
 const menu = document.getElementById("custom-menu");
 let fadeOutTimer = null;
+let lastContextMenuPoint = { x: 18, y: 74 };
 document.addEventListener("contextmenu", function (e) {
   e.preventDefault();
 
@@ -39,6 +128,7 @@ document.addEventListener("click", function () {
 // 顯示選單（含定位）
 function showMenuAt(x, y) {
   closeAllMenus();
+  lastContextMenuPoint = { x, y };
   const menuWidth = menu.offsetWidth;
   const menuHeight = menu.offsetHeight;
   const winW = window.innerWidth;
@@ -83,6 +173,147 @@ function fadeOut(callback) {
   }, 100); // 與 CSS transition 時間一致 (0.2s)
 }
 /* -------------------右鍵選單end------------------- */
+
+/* -------------------設定面板start------------------- */
+const DEFAULT_WIDGET_SETTINGS = {
+  tomato: "#f05d5d",
+  stopwatch: "#b61db6",
+  timer: "#2684c7",
+  opacity: 28,
+};
+
+let widgetSettings = { ...DEFAULT_WIDGET_SETTINGS };
+
+function loadWidgetSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("focus-widget-settings") || "{}");
+    widgetSettings = { ...DEFAULT_WIDGET_SETTINGS, ...saved };
+  } catch (_) {
+    widgetSettings = { ...DEFAULT_WIDGET_SETTINGS };
+  }
+}
+
+function saveWidgetSettings() {
+  localStorage.setItem("focus-widget-settings", JSON.stringify(widgetSettings));
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace("#", "");
+  const value = parseInt(clean.length === 3 ? clean.split("").map(ch => ch + ch).join("") : clean, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function darkenHex(hex, amount = 0.28) {
+  const { r, g, b } = hexToRgb(hex);
+  const toHex = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${toHex(r * (1 - amount))}${toHex(g * (1 - amount))}${toHex(b * (1 - amount))}`;
+}
+
+function hexToRgba(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyWidgetTheme(type, color) {
+  const opacity = Math.max(0.15, Math.min(0.75, widgetSettings.opacity / 100));
+  const dark = darkenHex(color);
+  const targets = {
+    tomato: ["tomato-widget", "drag-handle"],
+    stopwatch: ["stopwatch-widget", "stopwatch-drag"],
+    timer: ["timer-widget", "timer-drag"],
+  };
+  const [widgetId, headerId] = targets[type];
+  const widget = document.getElementById(widgetId);
+  const header = document.getElementById(headerId);
+  if (widget) widget.style.backgroundColor = hexToRgba(color, opacity);
+  if (header) header.style.backgroundColor = hexToRgba(dark, Math.min(opacity + 0.18, 0.9));
+}
+
+function applyWidgetSettings() {
+  applyWidgetTheme("tomato", widgetSettings.tomato);
+  applyWidgetTheme("stopwatch", widgetSettings.stopwatch);
+  applyWidgetTheme("timer", widgetSettings.timer);
+  const value = document.getElementById("setting-opacity-value");
+  if (value) value.textContent = `${widgetSettings.opacity}%`;
+}
+
+function syncSettingsInputs() {
+  const tomato = document.getElementById("setting-tomato-color");
+  const stopwatch = document.getElementById("setting-stopwatch-color");
+  const timer = document.getElementById("setting-timer-color");
+  const opacity = document.getElementById("setting-widget-opacity");
+  if (tomato) tomato.value = widgetSettings.tomato;
+  if (stopwatch) stopwatch.value = widgetSettings.stopwatch;
+  if (timer) timer.value = widgetSettings.timer;
+  if (opacity) opacity.value = widgetSettings.opacity;
+  applyWidgetSettings();
+}
+
+function placeFloatingPanel(panel) {
+  const rect = panel.getBoundingClientRect();
+  const margin = 12;
+  const left = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, lastContextMenuPoint.x));
+  const top = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, lastContextMenuPoint.y));
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function openSettingsPanel() {
+  fadeOut();
+  const panel = document.getElementById("settings-panel");
+  if (!panel) return;
+  syncSettingsInputs();
+  panel.classList.add("show");
+  panel.classList.remove("hiding");
+  panel.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => placeFloatingPanel(panel));
+}
+
+function fadeOutSettingsPanel(callback) {
+  const panel = document.getElementById("settings-panel");
+  if (!panel || !panel.classList.contains("show")) return;
+  panel.classList.remove("show");
+  panel.classList.add("hiding");
+  panel.setAttribute("aria-hidden", "true");
+  setTimeout(() => {
+    panel.classList.remove("hiding");
+    if (callback) callback();
+  }, 120);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadWidgetSettings();
+  syncSettingsInputs();
+  const bindings = [
+    ["setting-tomato-color", "tomato"],
+    ["setting-stopwatch-color", "stopwatch"],
+    ["setting-timer-color", "timer"],
+  ];
+  bindings.forEach(([id, key]) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      widgetSettings[key] = input.value;
+      applyWidgetSettings();
+      saveWidgetSettings();
+    });
+  });
+  const opacity = document.getElementById("setting-widget-opacity");
+  if (opacity) {
+    opacity.addEventListener("input", () => {
+      widgetSettings.opacity = Number(opacity.value);
+      applyWidgetSettings();
+      saveWidgetSettings();
+    });
+  }
+  const close = document.getElementById("settings-close");
+  if (close) close.addEventListener("click", () => fadeOutSettingsPanel());
+});
+/* -------------------設定面板end------------------- */
 
 
 
@@ -300,6 +531,7 @@ function startTimer() {  //開始計時器
       isWorking = !isWorking;
       remainingTime = isWorking ? workDuration : restDuration;
       updatePhaseText();
+      playSound("bell");   // 階段結束鈴聲
       startTimer(); // 自動切換並繼續
     } else {
       remainingTime--;
@@ -647,16 +879,6 @@ document.querySelectorAll('.tomato-settings input').forEach(input => {
   });
 });
 
-document.getElementById('apply-btn').addEventListener('click', () => {
-  const work = parseInt(document.getElementById('work-duration').value, 10);
-  const rest = parseInt(document.getElementById('break-duration').value, 10);
-
-  if (isNaN(work) || isNaN(rest)) {
-    alert('請輸入有效的整數');
-    return;
-  }
-});
-
 //------番茄鐘輸入限制end------
 
 
@@ -804,8 +1026,8 @@ function resetStopwatch() {  //重設碼表
 }
 
 function updateStopwatchDisplay() {  //碼表時間設置
-  const hh = String(Math.floor(remainingTime / 3600)).padStart(2, "0");
-  const mm = String(Math.floor(stopwatchSeconds / 60)).padStart(2, "0");
+  const hh = String(Math.floor(stopwatchSeconds / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((stopwatchSeconds % 3600) / 60)).padStart(2, "0");
   const ss = String(stopwatchSeconds % 60).padStart(2, "0");
   stopwatchDisplay.textContent = `${hh}:${mm}:${ss}`;
 }
@@ -924,7 +1146,7 @@ function fadeOutstopwatchMenu(callback) {
   }, 100);
 }
 
-function resetstopwatchClockPosition(){
+function resetStopwatchPosition(){
   stopwatchWidget.style.top = "100px";
   stopwatchWidget.style.left = "100px";
 }
@@ -1153,51 +1375,659 @@ document.addEventListener('mouseup', () => {
 /* -------------------碼表end------------------- */
 
 
-/* =================== YouTube 背景影片(beta)start =================== */
-(function initYouTubeBg() {
-  // 你指定的影片：https://www.youtube.com/watch?v=jfKfPfyJRdk
-  const VIDEO_ID = "qwdzIECTqn8";
+/* =================== Lofi 音樂播放器 (YouTube 背景) start =================== */
+/*
+  曲目清單：背景影片同時也是音樂來源。
+  以 Lofi Girl 的長期直播為主（多年穩定不下架）。
+  想新增 / 更換，只要改下面的 id（YouTube 網址 watch?v= 後面那段）與 category 即可。
+*/
+const MUSIC_TRACKS = [
+  { title: "Lofi Girl · lofi hip hop radio 📚",     id: "rFZHOHl-L8A", category: "lofigirl" },
+  { title: "Lofi Girl · summer lofi radio ☀️",      id: "0muHFBSiybw", category: "lofigirl" },
+  { title: "Lofi Girl · sleep lofi radio 🌌",       id: "VAlMDl00mYY", category: "lofigirl" },
+  { title: "Lofi Girl · synth ambient radio 🌌",    id: "GSfT7H87zq4", category: "lofigirl" },
+  { title: "Lofi Girl · Study With Me Pomodoro 📚", id: "qGohtGC5Rtk", category: "lofigirl" },
+  { title: "Lofi Girl · sad lofi radio ☔",         id: "CwPCy1GLS38", category: "lofigirl" },
+  { title: "Lofi Girl · asian lofi radio ⛩️",       id: "1Tl2FtV06qo", category: "lofigirl" },
+  { title: "Lofi Girl · jazz lofi radio 🎷",        id: "E2vONfzoyRI", category: "lofigirl" },
+  { title: "Lofi Girl · sleep/chill radio 💤",      id: "JD-kMIpDfnY", category: "lofigirl" },
+  { title: "Lofi Girl · relaxing piano radio 🎹",   id: "N0snMcR6aaA", category: "lofigirl" },
+  { title: "Lofi Girl · christmas lofi radio 🎄",   id: "XSXEaikz0Bc", category: "lofigirl" },
+  { title: "Lofi Girl · classical music radio 🎻",  id: "jXAEIWcGXwE", category: "lofigirl" },
+  { title: "Lofi Girl · relaxing jazz radio 🌹",    id: "A8jDx9TLMQc", category: "lofigirl" },
+  { title: "Lofi Girl · Halloween lofi radio 🧟",   id: "3GQY80jyysQ", category: "lofigirl" },
+  { title: "Lofi Girl · fireplace ambience 🔥",     id: "q_4KI-ChIIs", category: "lofigirl" },
+  { title: "Lofi Girl · chill guitar radio 🎸",     id: "E_XmwjgRLz8", category: "lofigirl" },
+  { title: "Lofi Girl · sleep ambient radio 💤",    id: "xORCbIptqcc", category: "lofigirl" },
+  { title: "Lofi Girl · medieval lofi radio 🏰",    id: "IxPANmjPaek", category: "lofigirl" },
+  { title: "Lofi Girl · gentle rain ambience 🌧",   id: "-OekvEFm1lo", category: "lofigirl" },
+  { title: "Lofi Girl · dark ambient radio 🌃",     id: "S_MOd40zlYU", category: "lofigirl" },
+  { title: "Lofi Girl · synthwave radio 🌌",        id: "4xDzrJKXOOY", category: "lofigirl" },
+  { title: "Dream Airlines · dark cabin sleep",     id: "3vkOllGLWsk", category: "dreamairlines" },
+  { title: "Dream Airlines · dark cabin 10 hours",  id: "3pe-Vm_eP78", category: "dreamairlines" },
+  { title: "Dream Airlines · cabin ambience",       id: "lq9QttNtrQI", category: "dreamairlines" },
+  { title: "Dream Airlines · overnight flight",     id: "LRp0Nc-YQZE", category: "dreamairlines" },
+  { title: "Dream Airlines · first class sleep",    id: "dR4cu3-7VWU", category: "dreamairlines" },
+  { title: "阿鮑Abao · Rainy Shibuya piano",       id: "5Q2Pc-e-8Qc", category: "abao" },
+  { title: "阿鮑Abao · Rainy Shibuya rain sound",  id: "C1GghWN5UkU", category: "abao" },
+  { title: "阿鮑Abao · Shibuya Pomodoro 25-5",     id: "0JvAPwUHLNk", category: "abao" },
+  { title: "阿鮑Abao · Shibuya Crossing 50-10",    id: "LjRygr4xR7g", category: "abao" },
+  { title: "空靈 · 432Hz 北歐雲海",                id: "SjeMHmMueLM", category: "ethereal" },
+  { title: "空靈 · 432Hz 北歐冥想",                id: "WaNH_GQ9l_Q", category: "ethereal" },
+  { title: "Best of lofi hip hop ✨ relax/study", id: "n61ULEU7CO0", category: "study" },
+  { title: "1 A.M Study Session 📚",              id: "lTRiuFIWV54", category: "study" },
+];
 
-  // 如果頁面沒有 player 容器就不做（避免日後你拆頁面時爆掉）
-  if (!document.getElementById("player")) return;
+const MUSIC_CATEGORIES = [
+  { key: "all",   label: "全部 ✨" },
+  { key: "lofigirl", label: "Lofi Girl 👧" },
+  { key: "dreamairlines", label: "Dream Airlines ✈️" },
+  { key: "abao", label: "阿鮑Abao 🌧️" },
+  { key: "ethereal", label: "空靈 🫧" },
+  { key: "study", label: "Study 📚" },
+];
 
-  // 載入 YouTube IFrame API
-  const tag = document.createElement("script");
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
+const Music = (() => {
+  let player = null;
+  let ready = false;
+  let currentIndex = 0;
+  let loop = true;
+  let muted = true;          // 為了自動播放先靜音，使用者一互動就解除
+  let userUnmuted = false;
+  let lastVolume = 50;
+  let pollTimer = null;
+  let seeking = false;
 
-  // YouTube API 需要全域 callback
-  window.onYouTubeIframeAPIReady = function () {
-    // eslint-disable-next-line no-undef
-    const player = new YT.Player("player", {
-      videoId: VIDEO_ID,
-      playerVars: {
-        autoplay: 1,
-        controls: 0,
-        mute: 1,             // 很重要：不靜音通常會被瀏覽器擋自動播放
-        loop: 1,
-        playlist: VIDEO_ID,  // loop 單曲循環必須搭配 playlist
-        playsinline: 1,
-        rel: 0,
-        modestbranding: 1
-      },
-      events: {
-        onReady: (e) => {
-          // 確保能播
-          e.target.mute();
-          e.target.playVideo();
+  // ----- DOM -----
+  const el = {
+    title:    document.getElementById("mp-title"),
+    progress: document.getElementById("mp-progress"),
+    current:  document.getElementById("mp-current"),
+    duration: document.getElementById("mp-duration"),
+    play:     document.getElementById("mp-play"),
+    prev:     document.getElementById("mp-prev"),
+    next:     document.getElementById("mp-next"),
+    loop:     document.getElementById("mp-loop"),
+    mute:     document.getElementById("mp-mute"),
+    volume:   document.getElementById("mp-volume"),
+    tracklist: document.getElementById("mp-tracklist"),
+    categories: document.getElementById("mp-categories"),
+  };
+
+  function fmtTime(sec) {
+    if (!isFinite(sec) || sec < 0) return "--:--";
+    sec = Math.floor(sec);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  }
+
+  // ----- YouTube API 載入 -----
+  function init() {
+    if (!document.getElementById("player")) return;
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    window.onYouTubeIframeAPIReady = () => {
+      // eslint-disable-next-line no-undef
+      player = new YT.Player("player", {
+        videoId: MUSIC_TRACKS[currentIndex].id,
+        playerVars: {
+          autoplay: 1, controls: 0, mute: 1, loop: 1,
+          playlist: MUSIC_TRACKS[currentIndex].id,
+          playsinline: 1, rel: 0, modestbranding: 1, iv_load_policy: 3,
+          origin: window.location.origin,   // 配合 http://localhost 載入，避免嵌入被擋
         },
-        onStateChange: (e) => {
-          // 有些情況會停住，保險起見補一下
-          // eslint-disable-next-line no-undef
-          if (e.data === YT.PlayerState.ENDED) e.target.playVideo();
+        events: {
+          onReady: onReady,
+          onStateChange: onStateChange,
+          onError: onError,
+        },
+      });
+      window._bgPlayer = player;
+    };
+  }
+
+  function onReady(e) {
+    ready = true;
+    e.target.mute();
+    e.target.setVolume(lastVolume);
+    e.target.playVideo();
+    el.volume.value = lastVolume;
+    updateTrackList();
+    startPolling();
+  }
+
+  function onStateChange(e) {
+    // eslint-disable-next-line no-undef
+    const YTS = YT.PlayerState;
+    if (e.data === YTS.ENDED) {
+      if (loop) player.seekTo(0), player.playVideo();
+      else next();
+    }
+    updatePlayIcon();
+  }
+
+  // 影片無法播放（被下架、禁止嵌入、地區限制…）時，自動跳到下一首
+  function onError(e) {
+    console.warn("[Music] YouTube 播放錯誤 code:", e.data, "track:", MUSIC_TRACKS[currentIndex]);
+    el.title.textContent = MUSIC_TRACKS[currentIndex].title + "（無法播放，跳下一首）";
+    setTimeout(() => next(), 1200);
+  }
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (!ready || seeking) return;
+      try {
+        const cur = player.getCurrentTime() || 0;
+        const dur = player.getDuration() || 0;
+        el.current.textContent = fmtTime(cur);
+        // 直播的 duration 通常為 0，沒有有意義的進度條
+        if (dur > 0 && isFinite(dur)) {
+          el.duration.textContent = fmtTime(dur);
+          el.progress.value = String(Math.round((cur / dur) * 1000));
+          el.progress.disabled = false;
+        } else {
+          el.duration.textContent = "LIVE";
+          el.progress.value = "0";
+          el.progress.disabled = true;
         }
+      } catch (_) { /* player 尚未就緒 */ }
+    }, 500);
+  }
+
+  function updatePlayIcon() {
+    if (!ready) return;
+    // eslint-disable-next-line no-undef
+    const playing = player.getPlayerState() === YT.PlayerState.PLAYING;
+    el.play.textContent = playing ? "⏸" : "▶";
+  }
+
+  // ----- 控制 -----
+  function ensureUnmuted() {
+    // 首次互動後解除靜音，讓使用者真的聽得到
+    if (!userUnmuted && ready) {
+      userUnmuted = true;
+      muted = false;
+      player.unMute();
+      player.setVolume(lastVolume);
+      el.mute.textContent = "🔊";
+    }
+  }
+
+  function togglePlay() {
+    if (!ready) return;
+    ensureUnmuted();
+    // eslint-disable-next-line no-undef
+    const playing = player.getPlayerState() === YT.PlayerState.PLAYING;
+    if (playing) player.pauseVideo();
+    else player.playVideo();
+    setTimeout(updatePlayIcon, 150);
+  }
+
+  function loadIndex(i) {
+    currentIndex = (i + MUSIC_TRACKS.length) % MUSIC_TRACKS.length;
+    const track = MUSIC_TRACKS[currentIndex];
+    el.title.textContent = track.title;
+    if (ready) {
+      player.loadVideoById(track.id);
+      if (muted) player.mute(); else { player.unMute(); player.setVolume(lastVolume); }
+    }
+    updateTrackList();
+  }
+
+  function next() { loadIndex(currentIndex + 1); }
+  function prev() { loadIndex(currentIndex - 1); }
+
+  function toggleLoop() {
+    loop = !loop;
+    el.loop.classList.toggle("active", loop);
+  }
+
+  function setVolume(v) {
+    lastVolume = Number(v);
+    if (!ready) return;
+    ensureUnmuted();
+    player.setVolume(lastVolume);
+    if (lastVolume === 0) { muted = true; player.mute(); el.mute.textContent = "🔇"; }
+    else { muted = false; player.unMute(); el.mute.textContent = lastVolume < 50 ? "🔉" : "🔊"; }
+  }
+
+  function toggleMute() {
+    if (!ready) return;
+    muted = !muted;
+    if (muted) { player.mute(); el.mute.textContent = "🔇"; }
+    else { userUnmuted = true; player.unMute(); player.setVolume(lastVolume || 50); el.mute.textContent = "🔊"; }
+  }
+
+  // ----- 曲目清單 / 分類 -----
+  let activeCategory = "all";
+
+  function renderCategories() {
+    el.categories.innerHTML = "";
+    MUSIC_CATEGORIES.forEach(cat => {
+      const btn = document.createElement("button");
+      btn.className = "mp-cat" + (cat.key === activeCategory ? " active" : "");
+      btn.textContent = cat.label;
+      btn.onclick = () => {
+        activeCategory = cat.key;
+        renderCategories();
+        updateTrackList();
+      };
+      el.categories.appendChild(btn);
+    });
+  }
+
+  function updateTrackList() {
+    el.tracklist.innerHTML = "";
+    MUSIC_TRACKS.forEach((track, i) => {
+      if (activeCategory !== "all" && track.category !== activeCategory) return;
+      const li = document.createElement("li");
+      if (i === currentIndex) li.classList.add("playing");
+      const dot = document.createElement("span");
+      dot.className = "mp-track-dot";
+      const span = document.createElement("span");
+      span.textContent = track.title;
+      li.appendChild(dot);
+      li.appendChild(span);
+      li.onclick = () => { loadIndex(i); ensureUnmuted(); player && player.playVideo(); };
+      el.tracklist.appendChild(li);
+    });
+  }
+
+  // ----- 自動停止 (sleep timer / 配合計時器) -----
+  let sleepTimeout = null;
+  let sleepCountdown = null;
+  function setSleepTimer(minutes) {
+    clearTimeout(sleepTimeout);
+    clearInterval(sleepCountdown);
+    const remainEl = document.getElementById("mp-sleep-remaining");
+    if (!minutes || minutes <= 0) { remainEl.textContent = ""; return; }
+    let endMs = minutes * 60 * 1000;
+    const tick = () => {
+      endMs -= 1000;
+      if (endMs <= 0) { remainEl.textContent = ""; return; }
+      remainEl.textContent = fmtTime(endMs / 1000) + " 後停止";
+    };
+    remainEl.textContent = fmtTime(minutes * 60) + " 後停止";
+    sleepCountdown = setInterval(tick, 1000);
+    sleepTimeout = setTimeout(() => {
+      if (ready) player.pauseVideo();
+      clearInterval(sleepCountdown);
+      remainEl.textContent = "已停止 ⏹";
+      updatePlayIcon();
+    }, minutes * 60 * 1000);
+  }
+
+  // ----- 事件綁定 -----
+  function bind() {
+    el.play.onclick  = togglePlay;
+    el.prev.onclick  = prev;
+    el.next.onclick  = next;
+    el.loop.onclick  = toggleLoop;
+    el.mute.onclick  = toggleMute;
+    el.volume.oninput = (e) => setVolume(e.target.value);
+
+    // 進度條拖曳（直播時 disabled，不會觸發）
+    el.progress.addEventListener("mousedown", () => { seeking = true; });
+    el.progress.addEventListener("input", () => {
+      if (!ready) return;
+      const dur = player.getDuration();
+      if (dur > 0 && isFinite(dur)) {
+        el.current.textContent = fmtTime((el.progress.value / 1000) * dur);
       }
     });
+    el.progress.addEventListener("change", () => {
+      if (ready) {
+        const dur = player.getDuration();
+        if (dur > 0 && isFinite(dur)) player.seekTo((el.progress.value / 1000) * dur, true);
+      }
+      seeking = false;
+    });
 
-    // 如果你之後想做音量控制，可以把 player 存在 window 上
-    window._bgPlayer = player;
-  };
+    document.getElementById("mp-sleep-timer").addEventListener("change", (e) => {
+      setSleepTimer(Number(e.target.value));
+    });
+
+    // 首次任何互動就解除靜音，讓桌面一打開就能聽到（符合「在桌面顯示 + 聽音樂」）
+    const unmuteOnce = () => { ensureUnmuted(); updatePlayIcon(); };
+    document.addEventListener("pointerdown", unmuteOnce, { once: true });
+    document.addEventListener("keydown", unmuteOnce, { once: true });
+
+    el.title.textContent = MUSIC_TRACKS[currentIndex].title;
+    renderCategories();
+    updateTrackList();
+  }
+
+  bind();
+  init();
+
+  return { setSleepTimer, loadIndex, next, prev, togglePlay };
 })();
-/* ===== YouTube 背景影片(beta)end ===== */
+
+/* ----- 音樂面板開關 ----- */
+function toggleMusicPanel() {
+  fadeOut();
+  const panel = document.getElementById("music-panel");
+  const bar = document.getElementById("music-player");
+  const willShow = !panel.classList.contains("show");
+  panel.classList.toggle("show", willShow);
+  panel.setAttribute("aria-hidden", String(!willShow));
+  if (willShow) requestAnimationFrame(() => placeFloatingPanel(panel));
+  // 開啟面板時一併顯示底部控制列
+  bar.classList.add("show");
+  bar.setAttribute("aria-hidden", "false");
+}
+
+(function initMusicUI() {
+  const toggle = document.getElementById("music-toggle");
+  const panel = document.getElementById("music-panel");
+  const header = panel.querySelector(".mp-panel-header");
+  const closeBtn = document.getElementById("music-panel-close");
+  const bar = document.getElementById("music-player");
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  // 預設顯示底部控制列（桌面常駐）
+  bar.classList.add("show");
+  bar.setAttribute("aria-hidden", "false");
+
+  if (toggle) {
+    toggle.addEventListener("click", (e) => { e.stopPropagation(); toggleMusicPanel(); });
+    toggle.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); });
+  }
+  closeBtn.addEventListener("click", () => {
+    panel.classList.remove("show");
+    panel.setAttribute("aria-hidden", "true");
+  });
+
+  header.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    dragging = true;
+    const rect = panel.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    panel.classList.add("dragging");
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = panel.getBoundingClientRect();
+    const margin = 8;
+    const nextLeft = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, e.clientX - offsetX));
+    const nextTop = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, e.clientY - offsetY));
+    panel.style.left = `${nextLeft}px`;
+    panel.style.top = `${nextTop}px`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove("dragging");
+  });
+})();
+/* =================== Lofi 音樂播放器 end =================== */
+
+
+/* =================== 計時器 (倒數) start =================== */
+let countdownTotal = 5 * 60;   // 預設 5 分鐘
+let countdownRemaining = countdownTotal;
+let countdownTimer = null;
+
+function showTimer() {
+  const widget = document.getElementById("timer-widget");
+  widget.style.display = "block";
+  requestAnimationFrame(() => widget.classList.add("show"));
+}
+
+function hideTimer() {
+  const widget = document.getElementById("timer-widget");
+  widget.classList.remove("show");
+  widget.classList.add("hide");
+  setTimeout(() => {
+    widget.classList.remove("hide");
+    widget.style.display = "none";
+  }, 300);
+}
+
+function readCountdownInputs() {
+  const h = Math.min(23, Math.max(0, parseInt(document.getElementById("timer-h-input").value, 10) || 0));
+  const m = Math.min(59, Math.max(0, parseInt(document.getElementById("timer-m-input").value, 10) || 0));
+  const s = Math.min(59, Math.max(0, parseInt(document.getElementById("timer-s-input").value, 10) || 0));
+  return h * 3600 + m * 60 + s;
+}
+
+function updateCountdownDisplay() {
+  const hh = String(Math.floor(countdownRemaining / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((countdownRemaining % 3600) / 60)).padStart(2, "0");
+  const ss = String(countdownRemaining % 60).padStart(2, "0");
+  document.getElementById("countdown-display").textContent = `${hh}:${mm}:${ss}`;
+}
+
+function startCountdown() {
+  if (countdownTimer) return;
+  // 若顯示為 0 或剛重設，從輸入框重新讀取
+  if (countdownRemaining <= 0) {
+    countdownTotal = readCountdownInputs();
+    countdownRemaining = countdownTotal;
+  }
+  if (countdownRemaining <= 0) return;
+  document.getElementById("countdown-display").classList.remove("finished");
+  countdownTimer = setInterval(() => {
+    countdownRemaining--;
+    updateCountdownDisplay();
+    if (countdownRemaining <= 0) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      onCountdownFinished();
+    }
+  }, 1000);
+}
+
+function pauseCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+}
+
+function resetCountdown() {
+  pauseCountdown();
+  countdownTotal = readCountdownInputs();
+  countdownRemaining = countdownTotal;
+  document.getElementById("countdown-display").classList.remove("finished");
+  updateCountdownDisplay();
+}
+
+function onCountdownFinished() {
+  document.getElementById("countdown-display").classList.add("finished");
+  playSound("alarm");   // 倒數結束鈴聲（最多響 RING_SECONDS 秒，可在設定關閉）
+}
+
+// 輸入框即時套用，且限制為數字
+["timer-h-input", "timer-m-input", "timer-s-input"].forEach(id => {
+  const input = document.getElementById(id);
+  input.addEventListener("input", () => {
+    input.value = input.value.replace(/[^0-9]/g, "");
+  });
+  input.addEventListener("change", () => {
+    if (!countdownTimer) resetCountdown();
+  });
+});
+
+function resetTimerWidgetPosition() {
+  const widget = document.getElementById("timer-widget");
+  widget.style.top = "200px";
+  widget.style.left = "200px";
+}
+
+const timerWidgetEl = document.getElementById("timer-widget");
+const timerIcon = document.getElementById("timer-icon");
+const timerDragHandle = document.getElementById("timer-drag");
+let rememberedTimerSize = { width: 450, height: 350 };
+let timerIconDragging = false;
+let timerIconOffsetX = 0;
+let timerIconOffsetY = 0;
+
+function keepWidgetInViewport(widget) {
+  requestAnimationFrame(() => {
+    const rect = widget.getBoundingClientRect();
+    let left = parseFloat(widget.style.left) || rect.left;
+    let top = parseFloat(widget.style.top) || rect.top;
+    if (rect.right > window.innerWidth) left -= rect.right - window.innerWidth;
+    if (rect.bottom > window.innerHeight) top -= rect.bottom - window.innerHeight;
+    widget.style.left = Math.max(0, left) + "px";
+    widget.style.top = Math.max(0, top) + "px";
+  });
+}
+
+function restoreTimerFromIcon() {
+  timerWidgetEl.classList.remove("minimized");
+  timerWidgetEl.style.width = rememberedTimerSize.width + "px";
+  timerWidgetEl.style.height = rememberedTimerSize.height + "px";
+  timerWidgetEl.style.display = "block";
+  timerIcon.style.display = "none";
+  timerDragHandle.style.display = "flex";
+  keepWidgetInViewport(timerWidgetEl);
+}
+
+function minimizeTimer() {
+  const isNowMinimized = timerWidgetEl.classList.toggle("minimized");
+  const rect = timerWidgetEl.getBoundingClientRect();
+  if (isNowMinimized) {
+    rememberedTimerSize = { width: rect.width, height: rect.height };
+    timerWidgetEl.style.removeProperty("width");
+    timerWidgetEl.style.removeProperty("height");
+    timerIcon.style.display = "flex";
+    timerIcon.style.left = rect.left - timerIcon.offsetWidth / 2 + "px";
+    timerIcon.style.top = rect.top - timerIcon.offsetHeight / 2 + "px";
+    timerWidgetEl.style.display = "none";
+  } else {
+    restoreTimerFromIcon();
+  }
+}
+
+timerIcon.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+timerIcon.addEventListener("dblclick", restoreTimerFromIcon);
+
+timerIcon.addEventListener("mouseenter", () => {
+  if (!timerWidgetEl.classList.contains("minimized") || timerIconDragging) return;
+  timerWidgetEl.style.display = "block";
+});
+
+timerIcon.addEventListener("mouseleave", () => {
+  if (!timerWidgetEl.classList.contains("minimized") || timerIconDragging) return;
+  setTimeout(() => {
+    if (!timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
+      timerWidgetEl.style.display = "none";
+    }
+  }, 100);
+});
+
+timerWidgetEl.addEventListener("mouseleave", () => {
+  if (!timerWidgetEl.classList.contains("minimized") || timerIconDragging) return;
+  setTimeout(() => {
+    if (!timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
+      timerWidgetEl.style.display = "none";
+    }
+  }, 100);
+});
+
+timerIcon.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  timerIconDragging = true;
+  timerIconOffsetX = e.clientX - timerIcon.offsetLeft;
+  timerIconOffsetY = e.clientY - timerIcon.offsetTop;
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!timerIconDragging) return;
+  const iconLeft = Math.max(0, Math.min(window.innerWidth - timerIcon.offsetWidth, e.clientX - timerIconOffsetX));
+  const iconTop = Math.max(0, Math.min(window.innerHeight - timerIcon.offsetHeight, e.clientY - timerIconOffsetY));
+  timerIcon.style.left = iconLeft + "px";
+  timerIcon.style.top = iconTop + "px";
+  timerWidgetEl.style.left = iconLeft + "px";
+  timerWidgetEl.style.top = iconTop + "px";
+  timerWidgetEl.style.display = "none";
+});
+
+document.addEventListener("mouseup", () => {
+  timerIconDragging = false;
+});
+
+timerDragHandle.addEventListener("dblclick", () => {
+  const rect = timerWidgetEl.getBoundingClientRect();
+  rememberedTimerSize = { width: rect.width, height: rect.height };
+  minimizeTimer();
+});
+
+// ----- 計時器拖曳 -----
+(function initTimerDrag() {
+  const widget = document.getElementById("timer-widget");
+  const handle = document.getElementById("timer-drag");
+  let dragging = false, ox = 0, oy = 0;
+
+  handle.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    dragging = true;
+    ox = e.clientX - widget.offsetLeft;
+    oy = e.clientY - widget.offsetTop;
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const w = widget.offsetWidth, h = widget.offsetHeight;
+    let nl = Math.max(0, Math.min(window.innerWidth - w, e.clientX - ox));
+    let nt = Math.max(0, Math.min(window.innerHeight - h, e.clientY - oy));
+    widget.style.left = nl + "px";
+    widget.style.top = nt + "px";
+  });
+  document.addEventListener("mouseup", () => { dragging = false; });
+
+  // ----- 計時器右鍵選單 -----
+  const timerMenu = document.getElementById("timer-menu");
+  widget.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllMenus();
+    const rect = widget.getBoundingClientRect();
+    timerMenu.style.left = (e.clientX - rect.left) + "px";
+    timerMenu.style.top = (e.clientY - rect.top) + "px";
+    timerMenu.style.position = "absolute";
+    timerMenu.classList.add("show");
+    timerMenu.classList.remove("hiding");
+  });
+  document.addEventListener("click", () => {
+    if (timerMenu.classList.contains("show")) {
+      timerMenu.classList.remove("show");
+      timerMenu.classList.add("hiding");
+      setTimeout(() => timerMenu.classList.remove("hiding"), 100);
+    }
+  });
+
+  // ----- 計時器縮放 -----
+  const resize = document.getElementById("timer-resize");
+  let rz = false, sx, sy, sw, sh;
+  resize.addEventListener("mousedown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    rz = true; sx = e.clientX; sy = e.clientY;
+    sw = widget.offsetWidth; sh = widget.offsetHeight;
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!rz) return;
+    widget.style.width = Math.max(300, sw + (e.clientX - sx)) + "px";
+    widget.style.height = Math.max(240, sh + (e.clientY - sy)) + "px";
+  });
+  document.addEventListener("mouseup", () => { rz = false; });
+
+  updateCountdownDisplay();
+})();
+/* =================== 計時器 (倒數) end =================== */
 

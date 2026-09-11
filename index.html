@@ -15,18 +15,102 @@
   </div>
   <!-- ------背景影片end------ -->
 
+  <!-- ------Lofi 音樂面板 start------ -->
+  <div id="music-panel" class="music-panel" aria-hidden="true">
+    <div class="mp-panel-header">
+      <span>Lofi Music 🎵</span>
+      <button id="music-panel-close" class="mp-panel-close" title="收起">✕</button>
+    </div>
+
+    <div class="mp-categories" id="mp-categories">
+      <!-- 分類由 script.js 動態產生 -->
+    </div>
+
+    <ul class="mp-tracklist" id="mp-tracklist">
+      <!-- 曲目由 script.js 動態產生 -->
+    </ul>
+
+    <div class="mp-sleep">
+      <label for="mp-sleep-timer">自動停止：</label>
+      <select id="mp-sleep-timer">
+        <option value="0">關閉</option>
+        <option value="15">15 分鐘</option>
+        <option value="30">30 分鐘</option>
+        <option value="45">45 分鐘</option>
+        <option value="60">60 分鐘</option>
+        <option value="90">90 分鐘</option>
+      </select>
+      <span id="mp-sleep-remaining" class="mp-sleep-remaining"></span>
+    </div>
+  </div>
+  <!-- ------Lofi 音樂面板 end------ -->
+
+  <!-- ------底部音樂播放控制列 start------ -->
+  <div id="music-player" class="music-player" aria-hidden="true">
+    <div class="mp-info">
+      <span class="mp-info-icon">📻</span>
+      <span id="mp-title" class="mp-title">lofi hip hop radio</span>
+    </div>
+
+    <div class="mp-seek">
+      <span id="mp-current" class="mp-time">0:00</span>
+      <input type="range" id="mp-progress" class="mp-progress" min="0" max="1000" value="0" step="1">
+      <span id="mp-duration" class="mp-time">--:--</span>
+    </div>
+
+    <div class="mp-controls">
+      <button id="mp-prev" class="mp-btn" title="上一首">⏮</button>
+      <button id="mp-play" class="mp-btn mp-play" title="播放 / 暫停">▶</button>
+      <button id="mp-next" class="mp-btn" title="下一首">⏭</button>
+      <button id="mp-loop" class="mp-btn mp-loop active" title="循環播放">🔁</button>
+      <div class="mp-volume">
+        <button id="mp-mute" class="mp-btn" title="靜音 / 取消靜音">🔊</button>
+        <input type="range" id="mp-volume" class="mp-vol-slider" min="0" max="100" value="50">
+      </div>
+    </div>
+  </div>
+  <!-- ------底部音樂播放控制列 end------ -->
+
   <!-- ------右鍵選單start------ -->
   <div id="custom-menu" class="context-menu">
     <ul>
       <li onclick="showTomato()">番茄鐘 🍅</li>
       <li onclick="showStopwatch()">碼表 ⏱️</li>
       <li onclick="showTimer()">計時器 ⏲️</li>
-      <li onclick="alert('music')">音樂 🎵</li>
-      <li onclick="alert('setting')">設定 ⚙️</li>
+      <li onclick="toggleMusicPanel()">音樂 🎵</li>
+      <li onclick="openSettingsPanel()">設定 ⚙️</li>
       <li onclick="closeApp()">關閉應用 ❌</li>
     </ul>
   </div>
    <!-- ------右鍵選單end------ -->
+
+  <!-- ------設定面板start------ -->
+  <div id="settings-panel" class="settings-panel" aria-hidden="true">
+    <div class="settings-header">
+      <span>設定 ⚙️</span>
+      <button id="settings-close" class="settings-close" title="收起">✕</button>
+    </div>
+    <div class="settings-body">
+      <label class="setting-row">
+        <span>番茄鐘顏色</span>
+        <input type="color" id="setting-tomato-color" value="#f05d5d">
+      </label>
+      <label class="setting-row">
+        <span>碼表顏色</span>
+        <input type="color" id="setting-stopwatch-color" value="#b61db6">
+      </label>
+      <label class="setting-row">
+        <span>計時器顏色</span>
+        <input type="color" id="setting-timer-color" value="#2684c7">
+      </label>
+      <label class="setting-row setting-opacity">
+        <span>透明度</span>
+        <input type="range" id="setting-widget-opacity" min="15" max="75" value="28">
+        <output id="setting-opacity-value">28%</output>
+      </label>
+    </div>
+  </div>
+  <!-- ------設定面板end------ -->
   <!-- ------時鐘start------ -->
   <div id="clock" class="clock">
     <div id="hour" class="hour">00</div>
@@ -72,6 +156,9 @@
         <label>工作: <input type="number" id="work-input" value="25" min="1" step = '1'></label>
         <label>休息: <input type="number" id="rest-input" value="5" min="1" step = '1'></label>
         <button id="apply-btn" onclick="applySettings()">套用</button>
+        <label class="sound-toggle" title="結束時播放鈴聲（最多響 5 秒）">
+          <input type="checkbox" class="sound-toggle-input" id="tomato-sound"> 🔔 音效
+        </label>
       </div>
     </div>
     <div id="resize-handle" class="resize-handle"></div>
@@ -104,9 +191,43 @@
     <div id="stopwatch-resize" class="resize-handle"></div>
   </div>
   
-  <img id="stopwatch-icon" src="./stopwatch.png" alt="碼表圖示" style="display: none;" draggable="false">
-  
   <!-- ------碼表end------ -->
+
+  <!-- ------計時器start------ -->
+  <div id="timer-icon" class="timer-icon" style="display: none;" draggable="false">⏲️</div>
+  <div id="timer-widget" class="timer-widget">
+    <div id="timer-menu" class="context-menu">
+      <ul>
+        <li onclick="resetTimerWidgetPosition()">回復預設位置 🔄</li>
+        <li id="toggle-minimize-timer" onclick="minimizeTimer()">縮小計時器 ⏲️</li>
+        <li onclick="hideTimer()">關閉計時器 ❌</li>
+      </ul>
+    </div>
+
+    <div id="timer-drag" class="widget-header">計時器 ⏲️</div>
+
+    <div class="timer-widget-body" id="timer-content">
+      <div id="timer-phase">倒數計時 ⏲️</div>
+      <div id="countdown-display">00:05:00</div>
+
+      <div class="timer-settings">
+        <label>時 <input type="number" id="timer-h-input" value="0" min="0" max="23" step="1"></label>
+        <label>分 <input type="number" id="timer-m-input" value="5" min="0" max="59" step="1"></label>
+        <label>秒 <input type="number" id="timer-s-input" value="0" min="0" max="59" step="1"></label>
+      </div>
+
+      <div class="timer-controls">
+        <button onclick="startCountdown()">開始</button>
+        <button onclick="pauseCountdown()">暫停</button>
+        <button onclick="resetCountdown()">重設</button>
+        <label class="sound-toggle" title="倒數結束時播放鈴聲（最多響 5 秒）">
+          <input type="checkbox" class="sound-toggle-input" id="timer-sound"> 🔔 音效
+        </label>
+      </div>
+    </div>
+    <div id="timer-resize" class="resize-handle"></div>
+  </div>
+  <!-- ------計時器end------ -->
 
   <script src="script.js"></script>
 </body>

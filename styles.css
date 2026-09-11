@@ -91,6 +91,101 @@ body {
 }
 /* -------------------右鍵選單end------------------- */
 
+/* -------------------設定面板start------------------- */
+.settings-panel {
+  position: fixed;
+  top: 92px;
+  left: 18px;
+  width: 300px;
+  color: #fff;
+  background: rgba(31, 27, 48, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1002;
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+  overflow: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.settings-panel.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.settings-panel.hiding {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-size: 17px;
+  font-weight: 700;
+  background: rgba(104, 80, 189, 0.34);
+}
+
+.settings-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.78;
+}
+
+.settings-close:hover { opacity: 1; }
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.setting-row input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.setting-opacity {
+  grid-template-columns: 64px 1fr 44px;
+}
+
+.setting-opacity input[type="range"] {
+  width: 100%;
+  accent-color: #8d78dd;
+}
+
+.setting-opacity output {
+  text-align: right;
+  color: #d8d2f5;
+  font-size: 13px;
+}
+/* -------------------設定面板end------------------- */
+
 /* -------------------時鐘start------------------- */
 .clock {
   display: flex;
@@ -257,6 +352,22 @@ body {
   text-align: center;
 }
 
+/* 音效開關（番茄鐘 / 計時器共用） */
+.sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sound-toggle input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #ff6b6b;
+}
+
 
 /* -----------番茄鐘右鍵start----------- */
 #tomato-menu {
@@ -390,6 +501,54 @@ body {
   text-align: center;
 }
 
+#stopwatch-phase {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
+
+#stopwatch-display {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: clamp(24px, 9vw, 72px);
+  font-weight: bold;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stopwatch-controls {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stopwatch-controls button {
+  max-width: 30%;
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  margin: 4px;
+  padding: 6px 16px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.stopwatch-controls button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 #stopwatch-widget.minimized .tomato-controls {
   display: none;
 }
@@ -437,3 +596,458 @@ body {
 
 /* -----------縮小碼表end----------- */
 /* -------------------碼表end------------------- */
+
+
+/* =================== Lofi 音樂播放器 start =================== */
+
+/* ----- 漢堡按鈕 (左上) ----- */
+.music-toggle {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 1001;
+  width: 46px;
+  height: 46px;
+  font-size: 22px;
+  line-height: 1;
+  color: #fff;
+  background: #6850bd55;
+  border: 1px solid #ffffff22;
+  border-radius: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.music-toggle:hover { background: #6850bd88; transform: scale(1.05); }
+
+/* ----- 音樂面板 ----- */
+.music-panel {
+  position: fixed;
+  top: 74px;
+  left: 18px;
+  width: 300px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 1001;
+  color: #fff;
+  background: #2a2440cc;
+  border: 1px solid #ffffff22;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-12px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.music-panel.show {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
+}
+
+.music-panel.dragging {
+  transition: opacity 0.25s ease;
+}
+
+.mp-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  background: #6850bd44;
+  cursor: grab;
+  user-select: none;
+}
+.mp-panel-header:active {
+  cursor: grabbing;
+}
+.mp-panel-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.mp-panel-close:hover { opacity: 1; }
+
+.mp-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px 4px;
+}
+.mp-cat {
+  padding: 6px 14px;
+  font-size: 14px;
+  color: #fff;
+  background: #ffffff1a;
+  border: 1px solid #ffffff22;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.mp-cat:hover { background: #ffffff33; }
+.mp-cat.active { background: #6850bd; border-color: #6850bd; }
+
+.mp-tracklist {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px 8px 8px;
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(185, 170, 255, 0.72) rgba(255, 255, 255, 0.07);
+}
+.mp-tracklist::-webkit-scrollbar {
+  width: 9px;
+}
+.mp-tracklist::-webkit-scrollbar-track {
+  margin: 8px 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025)),
+    rgba(28, 22, 48, 0.35);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.mp-tracklist::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 2px solid rgba(42, 36, 64, 0.78);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #d8d0ff, #8f79de 48%, #6550b4);
+  box-shadow: 0 0 10px rgba(185, 170, 255, 0.45);
+}
+.mp-tracklist::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, #efeaff, #a995f0 48%, #7660c8);
+}
+.mp-tracklist::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.mp-tracklist li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+.mp-tracklist li:hover { background: #ffffff14; }
+.mp-tracklist li.playing { background: #6850bd55; }
+.mp-tracklist li .mp-track-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff44;
+  flex: 0 0 auto;
+}
+.mp-tracklist li.playing .mp-track-dot { background: #7CFC9B; box-shadow: 0 0 8px #7CFC9B; }
+
+.mp-sleep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  border-top: 1px solid #ffffff1a;
+}
+.mp-sleep select {
+  background: #ffffff1a;
+  color: #fff;
+  border: 1px solid #ffffff33;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.mp-sleep select option { color: #000; }
+.mp-sleep-remaining { color: #b9aaff; margin-left: auto; }
+
+/* ----- 底部播放控制列 ----- */
+.music-player {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(20px);
+  width: min(760px, 92vw);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 22px;
+  z-index: 1000;
+  color: #fff;
+  background: #1f1b30cc;
+  border: 1px solid #ffffff22;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.music-player.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.mp-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+  max-width: 180px;
+}
+.mp-info-icon { font-size: 20px; }
+.mp-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-seek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.mp-time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #cfc8ee;
+  min-width: 42px;
+  text-align: center;
+}
+.mp-progress {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 5px;
+  border-radius: 4px;
+  background: #ffffff33;
+  cursor: pointer;
+  outline: none;
+}
+.mp-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+
+.mp-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mp-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  font-size: 16px;
+  color: #fff;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.mp-btn:hover { background: #ffffff22; }
+.mp-btn:active { transform: scale(0.92); }
+.mp-play {
+  background: #6850bd;
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+.mp-play:hover { background: #7a61d6; }
+.mp-loop { opacity: 0.5; }
+.mp-loop.active { opacity: 1; color: #b9aaff; }
+
+.mp-volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+.mp-vol-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 5px;
+  border-radius: 4px;
+  background: #ffffff33;
+  cursor: pointer;
+  outline: none;
+}
+.mp-vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+}
+/* =================== Lofi 音樂播放器 end =================== */
+
+
+/* =================== 計時器 start =================== */
+.timer-widget {
+  display: none;
+  position: absolute;
+  top: 200px;
+  left: 200px;
+  width: 450px;
+  height: 350px;
+  background: rgba(38, 132, 199, 0.28);
+  border-radius: 20px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  color: #ffffff;
+  user-select: none;
+  z-index: 9999;
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.timer-widget.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.timer-widget.hide {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+}
+#timer-drag {
+  background-color: rgba(36, 110, 165, 0.5);
+}
+.timer-widget-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 89%;
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  font-size: 20px;
+  text-align: center;
+}
+#countdown-display {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: clamp(24px, 9vw, 72px);
+  font-weight: bold;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+#countdown-display.finished { color: #ffd24d; animation: timer-flash 1s ease-in-out infinite; }
+@keyframes timer-flash { 50% { opacity: 0.35; } }
+
+.timer-settings {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.timer-settings input {
+  width: 56px;
+  padding: 4px;
+  margin-left: 6px;
+  border-radius: 6px;
+  border: none;
+  text-align: center;
+}
+.timer-controls {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.timer-controls button {
+  max-width: 30%;
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  margin: 4px;
+  padding: 6px 16px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+.timer-controls button:hover { background: rgba(255, 255, 255, 0.3); }
+
+.timer-icon {
+  position: absolute;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  font-size: 28px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  z-index: 999;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
+}
+
+.timer-icon:active {
+  cursor: grabbing;
+}
+
+#timer-widget.minimized .timer-controls,
+#timer-widget.minimized .timer-settings {
+  display: none;
+}
+
+#timer-widget.minimized .widget-header {
+  display: none;
+}
+
+#timer-widget.minimized {
+  width: 160px;
+  height: auto;
+  z-index: 998;
+}
+
+#timer-widget.minimized #countdown-display {
+  font-size: 32px;
+  min-height: 72px;
+}
+/* =================== 計時器 end =================== */
