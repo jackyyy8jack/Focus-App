@@ -1,10 +1,14 @@
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { createBackgroundMedia } = require('./background-media');
 
 /* -------------------open app start------------------- */
 let win;
+let backgroundMedia;
+let preferences = {};
+let preferencesFile;
 
 /*
   修正 YouTube 嵌入 Error 152 / 153：
@@ -26,23 +30,33 @@ const MIME = {
   '.ogg':  'audio/ogg',
   '.mp3':  'audio/mpeg',
   '.wav':  'audio/wav',
+  '.ttf':  'font/ttf',
 };
+const PUBLIC_FILES = new Set([
+  'index.html', 'script.js', 'styles.css', 'tomato.png', 'stopwatch.png',
+  'sounds/bell.ogg', 'sounds/alarm.ogg',
+  'fonts/NotoSansTC-VF.ttf',
+]);
 
 function startServer() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
-      let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-      if (urlPath === '/') urlPath = '/index.html';
-      const filePath = path.join(__dirname, urlPath);
-      // 防止目錄穿越，只允許讀取專案資料夾內的檔案
-      if (!filePath.startsWith(__dirname)) {
-        res.writeHead(403); res.end('Forbidden'); return;
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405); res.end(); return;
       }
+      let urlPath;
+      try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); }
+      catch (_) { res.writeHead(400); res.end('Bad request'); return; }
+      const mediaMatch = /^\/background-media\/([0-9a-f-]{36})$/i.exec(urlPath);
+      if (mediaMatch) { backgroundMedia.serve(req, res, mediaMatch[1]); return; }
+      const asset = urlPath === '/' ? 'index.html' : urlPath.replace(/^\//, '');
+      if (!PUBLIC_FILES.has(asset)) { res.writeHead(404); res.end('Not found'); return; }
+      const filePath = path.join(__dirname, asset);
       fs.readFile(filePath, (err, data) => {
         if (err) { res.writeHead(404); res.end('Not found'); return; }
         const ext = path.extname(filePath).toLowerCase();
         res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-        res.end(data);
+        res.end(req.method === 'HEAD' ? undefined : data);
       });
     });
     // port 給 0 由系統自動配一個空閒的 port
@@ -51,10 +65,53 @@ function startServer() {
 }
 
 app.on('ready', async () => {
+  const dataDirectory = app.getPath('userData');
+  preferencesFile = path.join(dataDirectory, 'preferences.json');
+  try { preferences = JSON.parse(fs.readFileSync(preferencesFile, 'utf8')) || {}; }
+  catch (_) { preferences = {}; }
+  backgroundMedia = createBackgroundMedia(dataDirectory);
+
+  ipcMain.on('settings-get', (event, key) => {
+    event.returnValue = typeof key === 'string' && /^focus-[\w-]+$/.test(key) &&
+      typeof preferences[key] === 'string' ? preferences[key] : null;
+  });
+  ipcMain.on('settings-set', (event, key, value) => {
+    if (typeof key !== 'string' || !/^focus-[\w-]+$/.test(key) ||
+        typeof value !== 'string' || value.length > 1000000) {
+      event.returnValue = false; return;
+    }
+    preferences[key] = value;
+    try {
+      fs.mkdirSync(dataDirectory, { recursive: true });
+      fs.writeFileSync(preferencesFile + '.tmp', JSON.stringify(preferences), 'utf8');
+      fs.renameSync(preferencesFile + '.tmp', preferencesFile);
+      event.returnValue = true;
+    } catch (_) { event.returnValue = false; }
+  });
+  ipcMain.handle('background-library', (event) => {
+    if (event.sender !== win.webContents) throw new Error('Unexpected window');
+    return backgroundMedia.list();
+  });
+  ipcMain.handle('background-choose', async (event, kind) => {
+    if (event.sender !== win.webContents || !['images', 'video'].includes(kind)) throw new Error('Invalid selection');
+    const result = await dialog.showOpenDialog(win, {
+      title: kind === 'images' ? '選擇背景照片' : '選擇背景影片',
+      properties: kind === 'images' ? ['openFile', 'multiSelections'] : ['openFile'],
+      filters: kind === 'images'
+        ? [{ name: '圖片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }]
+        : [{ name: '影片', extensions: ['mp4', 'webm', 'ogg'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    return kind === 'images'
+      ? backgroundMedia.replaceImages(result.filePaths)
+      : backgroundMedia.replaceVideo(result.filePaths[0]);
+  });
+
   const port = await startServer();
 
   win = new BrowserWindow({
-    fullscreen : true,
+    fullscreen: process.env.FOCUS_APP_SMOKE !== '1',
+    show: process.env.FOCUS_APP_SMOKE !== '1',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

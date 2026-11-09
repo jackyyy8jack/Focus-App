@@ -1,0 +1,16 @@
+{
+  "name": "focusapp",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test sound-ducking.test.js timing.test.js timer-layout.test.js server.test.js appearance.test.js background-media.test.js preferences.test.js background-ui.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "electron": "^36.4.0"
+  }
+}

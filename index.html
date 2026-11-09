@@ -1,17 +1,77 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;700&display=swap" rel="stylesheet">
   <meta charset="UTF-8">
   <title>Focus App</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <!-- ------背景影片start------ -->
-  <div class="video-background" aria-hidden="true">
+  <div class="focus-toolbar" role="toolbar" aria-label="專注工具">
+    <div class="focus-toolbar-actions">
+      <button type="button" onclick="showTomato()">🍅 番茄鐘</button>
+      <button type="button" onclick="showTimer()">⏲️ 倒數</button>
+      <button type="button" onclick="showStopwatch()">⏱️ 碼表</button>
+      <button type="button" onclick="openSettingsPanel()">⚙️ 設定</button>
+      <button type="button" onclick="openHelp()">❔ 說明</button>
+    </div>
+    <div class="focus-toolbar-task">
+      <label for="focus-task">現在專注於</label>
+      <input id="focus-task" type="text" maxlength="80" placeholder="寫下目前要完成的一件事">
+    </div>
+    <div class="focus-toolbar-progress">
+      <span id="focus-task-progress">開始番茄鐘後，完成的工作階段會記在這項事項下</span>
+      <span id="focus-today-count" aria-live="polite">今日完成 0 次專注</span>
+    </div>
+    <details class="focus-history">
+      <summary>查看專注紀錄</summary>
+      <ol id="focus-history-list"></ol>
+    </details>
+  </div>
+
+  <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
+    <div class="help-header">
+      <h2 id="help-title">Focus App 使用說明</h2>
+      <button type="button" id="help-close" aria-label="關閉使用說明">✕</button>
+    </div>
+    <div class="help-content">
+      <section>
+        <h3>1. 開始一段專注</h3>
+        <p>在左上角「現在專注於」寫下要做的事，點「番茄鐘」再按「開始」。預設工作 25 分鐘、休息 5 分鐘；到時間會響鈴並自動切換。可在番茄鐘內調整工作與休息分鐘數，按「套用」後生效。</p>
+      </section>
+      <section>
+        <h3>2. 查看完成紀錄</h3>
+        <p>完成一整段番茄鐘<strong>工作時間</strong>，今日次數才會加一；休息結束、暫停、重設都不計入。紀錄使用開始該段工作時填寫的事項，左上角會顯示該事項的累積次數與分鐘數。「查看專注紀錄」可看最近完成的工作階段。</p>
+      </section>
+      <section>
+        <h3>3. 倒數計時器與碼表</h3>
+        <p>「倒數」可設定時、分、秒，時間到會響鈴。「碼表」用來正向計時；兩者都有開始、暫停和重設。它們不會增加番茄鐘的專注完成次數。</p>
+      </section>
+      <section>
+        <h3>4. 背景音樂與音效</h3>
+        <p>底部控制列可播放、暫停及調整音量。對桌面空白處按右鍵，選「音樂」可選曲目及設定自動停止；按「管理曲目」可貼上 YouTube 網址新增音樂，或刪除清單中的曲目。新增時預設放入「自訂」；按「指定分類」並輸入分類名稱，可加入現有分類或建立新分類。分類內沒有曲目時會自動消失。番茄鐘或倒數鈴聲響起時，背景音量會暫時降到原本的 20%，之後恢復；兩種鈴聲可在各自的計時器中關閉。背景影片需要網路連線。</p>
+      </section>
+      <section>
+        <h3>5. 自訂背景</h3>
+        <p>在「設定」的背景區選原本影片、單張照片、照片輪播或自己的影片。照片可一次選多張，輪播間隔可調；自己的影片會靜音循環播放。選用自訂背景後，原本的背景音樂影片預設縮到右上角。直接拖曳小窗可移動，拖曳右下角可調整大小；按 ✕ 可隱藏，之後能在設定中重新打開。隱藏小窗時音樂仍會播放。照片和影片會存入 App 的本機資料夾，下次開啟仍可使用。</p>
+      </section>
+      <section>
+        <h3>6. 移動與縮小工具</h3>
+        <p>拖曳工具或設定視窗的上方標題可移動；在工具上按右鍵可重設位置、縮小或關閉。倒數計時器縮小後，雙擊小圖示即可放大。「設定」可選擇各元件，分別調整顏色與背景不透明度（0–100%）；可還原目前元件或全部外觀的原始配色。這些設定、目前事項和完成紀錄會保存在這台電腦上。</p>
+      </section>
+    </div>
+  </dialog>
+
+  <div id="custom-background" class="custom-background" aria-hidden="true">
+    <img id="background-photo" alt="">
+    <video id="background-video" autoplay muted loop playsinline></video>
+  </div>
+  <!-- ------背景影片start------ -->
+  <div id="youtube-shell" class="video-background" aria-hidden="true">
     <div id="player"></div>
     <div class="video-overlay"></div>
+    <button id="pip-close" class="pip-close" type="button" aria-label="隱藏原本影片，音樂繼續播放" title="隱藏畫面，保留音樂">✕</button>
+    <div id="pip-resize" class="pip-resize" role="separator" aria-label="拖曳以調整影片大小" title="拖曳以調整影片大小"></div>
   </div>
   <!-- ------背景影片end------ -->
 
@@ -19,8 +79,25 @@
   <div id="music-panel" class="music-panel" aria-hidden="true">
     <div class="mp-panel-header">
       <span>Lofi Music 🎵</span>
-      <button id="music-panel-close" class="mp-panel-close" title="收起">✕</button>
+      <div class="mp-header-actions">
+        <button id="mp-manage-toggle" type="button" class="mp-manage-toggle" aria-expanded="false">管理曲目</button>
+        <button id="music-panel-close" class="mp-panel-close" title="收起">✕</button>
+      </div>
     </div>
+
+    <form id="mp-manage-form" class="mp-manage-form" hidden>
+      <label for="mp-add-url">新增 YouTube 音樂</label>
+      <input id="mp-add-url" type="url" placeholder="貼上 YouTube 網址" required>
+      <input id="mp-add-title" type="text" maxlength="80" placeholder="曲目名稱（選填）">
+      <button id="mp-category-toggle" type="button" aria-expanded="false">指定分類（預設自訂）</button>
+      <div id="mp-category-fields" class="mp-category-fields" hidden>
+        <label for="mp-add-category">分類名稱</label>
+        <input id="mp-add-category" type="text" maxlength="40" list="mp-category-suggestions" placeholder="輸入現有或新的分類名稱">
+        <datalist id="mp-category-suggestions"></datalist>
+      </div>
+      <button type="submit">新增曲目</button>
+      <p id="mp-manage-message" role="status" aria-live="polite"></p>
+    </form>
 
     <div class="mp-categories" id="mp-categories">
       <!-- 分類由 script.js 動態產生 -->
@@ -79,6 +156,7 @@
       <li onclick="showTimer()">計時器 ⏲️</li>
       <li onclick="toggleMusicPanel()">音樂 🎵</li>
       <li onclick="openSettingsPanel()">設定 ⚙️</li>
+      <li onclick="openHelp()">使用說明 ❔</li>
       <li onclick="closeApp()">關閉應用 ❌</li>
     </ul>
   </div>
@@ -86,28 +164,66 @@
 
   <!-- ------設定面板start------ -->
   <div id="settings-panel" class="settings-panel" aria-hidden="true">
-    <div class="settings-header">
+    <div class="settings-header" title="拖曳以移動設定視窗">
       <span>設定 ⚙️</span>
       <button id="settings-close" class="settings-close" title="收起">✕</button>
     </div>
     <div class="settings-body">
       <label class="setting-row">
-        <span>番茄鐘顏色</span>
-        <input type="color" id="setting-tomato-color" value="#f05d5d">
+        <span>元件</span>
+        <select id="setting-component">
+          <option value="tomato">番茄鐘</option>
+          <option value="stopwatch">碼表</option>
+          <option value="timer">倒數計時器</option>
+          <option value="clock">時鐘數字</option>
+          <option value="toolbar">左上角工具列</option>
+          <option value="musicBar">底部播放器</option>
+          <option value="musicPanel">音樂選曲面板</option>
+          <option value="settingsPanel">設定面板</option>
+          <option value="helpPanel">使用說明</option>
+          <option value="menus">右鍵選單</option>
+        </select>
       </label>
       <label class="setting-row">
-        <span>碼表顏色</span>
-        <input type="color" id="setting-stopwatch-color" value="#b61db6">
-      </label>
-      <label class="setting-row">
-        <span>計時器顏色</span>
-        <input type="color" id="setting-timer-color" value="#2684c7">
+        <span>顏色</span>
+        <input type="color" id="setting-component-color" value="#f05d5d">
       </label>
       <label class="setting-row setting-opacity">
-        <span>透明度</span>
-        <input type="range" id="setting-widget-opacity" min="15" max="75" value="28">
+        <span>不透明度</span>
+        <input type="range" id="setting-widget-opacity" min="0" max="100" value="28">
         <output id="setting-opacity-value">28%</output>
       </label>
+      <p class="setting-hint">每個元件分開保存。時鐘顏色會改數字，透明度會改時鐘底板；文字保持清楚。</p>
+      <div class="appearance-reset">
+        <button id="setting-reset-selected" type="button">還原此元件</button>
+        <button id="setting-reset-all" type="button">還原全部外觀</button>
+      </div>
+      <div class="background-settings">
+        <h3>背景</h3>
+        <label class="setting-row" for="background-mode">
+          <span>顯示方式</span>
+          <select id="background-mode">
+            <option value="youtube">原本影片</option>
+            <option value="photo">單張照片</option>
+            <option value="slideshow">照片輪播</option>
+            <option value="video">自己的影片</option>
+          </select>
+        </label>
+        <button id="background-choose-photos" type="button">選擇照片（可多選）</button>
+        <span id="background-photo-count" class="setting-hint">尚未選擇照片</span>
+        <button id="background-choose-video" type="button">選擇影片</button>
+        <span id="background-video-name" class="setting-hint">尚未選擇影片</span>
+        <label class="setting-row setting-opacity" for="background-interval">
+          <span>輪播秒數</span>
+          <input id="background-interval" type="range" min="3" max="30" value="10">
+          <output id="background-interval-value">10 秒</output>
+        </label>
+        <label class="background-video-toggle" for="background-show-original">
+          <input id="background-show-original" type="checkbox" checked>
+          顯示右上角原本影片（隱藏時音樂繼續）
+        </label>
+        <p id="background-status" class="setting-hint" role="status">選擇自己的背景後，原本影片會顯示在右上角，可拖曳、從右下角縮放或隱藏。</p>
+      </div>
     </div>
   </div>
   <!-- ------設定面板end------ -->
@@ -153,8 +269,8 @@
       </div>
     
       <div class="tomato-settings">
-        <label>工作: <input type="number" id="work-input" value="25" min="1" step = '1'></label>
-        <label>休息: <input type="number" id="rest-input" value="5" min="1" step = '1'></label>
+        <label>工作: <input type="number" id="work-input" value="25" min="1" max="180" step = '1'></label>
+        <label>休息: <input type="number" id="rest-input" value="5" min="1" max="60" step = '1'></label>
         <button id="apply-btn" onclick="applySettings()">套用</button>
         <label class="sound-toggle" title="結束時播放鈴聲（最多響 5 秒）">
           <input type="checkbox" class="sound-toggle-input" id="tomato-sound"> 🔔 音效

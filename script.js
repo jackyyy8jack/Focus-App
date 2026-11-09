@@ -4,13 +4,25 @@ function closeApp() {
 }
 /* -------------------關閉程式end------------------- */
 
+// Electron's HTTP port changes between launches, so keep preferences in userData.
+const appStorage = window.electronAPI?.settingsGet ? {
+  getItem(key) {
+    const saved = window.electronAPI.settingsGet(key);
+    if (saved !== null) return saved;
+    const legacy = window.localStorage.getItem(key);
+    if (legacy !== null) window.electronAPI.settingsSet(key, legacy);
+    return legacy;
+  },
+  setItem(key, value) { window.electronAPI.settingsSet(key, String(value)); },
+} : localStorage;
+
 
 /* =================== 提示音效 start =================== */
 // 番茄鐘 / 計時器結束時的鈴聲。兩者可分開開關，且最多只響 RING_SECONDS 秒。
 const RING_SECONDS = 5;                 // 最多響幾秒（避免一直響）
 const soundSettings = {
-  tomato: localStorage.getItem("focus-sound-tomato") !== "off",
-  timer: localStorage.getItem("focus-sound-timer") !== "off",
+  tomato: appStorage.getItem("focus-sound-tomato") !== "off",
+  timer: appStorage.getItem("focus-sound-timer") !== "off",
 };
 const SOUND_TARGET = {
   bell: "tomato",
@@ -23,41 +35,76 @@ const SOUNDS = {
 };
 Object.values(SOUNDS).forEach(a => { a.preload = "auto"; a.volume = 0.8; });
 
-let _ringStopTimer = null;
+const activeRings = new Map();
+
+function finishRing(name, ring) {
+  // Ignore callbacks from a previous playback of the same reminder.
+  if (activeRings.get(name) !== ring) return;
+  clearTimeout(ring.stopTimer);
+  if (ring.audio) {
+    ring.audio.removeEventListener("ended", ring.finish);
+    ring.audio.removeEventListener("error", ring.fallback);
+    try { ring.audio.pause(); ring.audio.currentTime = 0; } catch (_) {}
+  }
+  if (ring.stopFallback) ring.stopFallback();
+  activeRings.delete(name);
+  Music.setDucked(activeRings.size > 0);
+}
 
 function playSound(name) {
   const target = SOUND_TARGET[name];
   if (target && !soundSettings[target]) return;
+  const previous = activeRings.get(name);
+  if (previous) finishRing(name, previous);
   const a = SOUNDS[name];
-  if (!a) { beepFallback(); return; }
+  const ring = { audio: a, stopTimer: null, stopFallback: null };
+  ring.finish = () => finishRing(name, ring);
+  let usingFallback = false;
+  ring.fallback = () => {
+    if (activeRings.get(name) !== ring || usingFallback) return;
+    usingFallback = true;
+    if (a) {
+      a.removeEventListener("ended", ring.finish);
+      a.removeEventListener("error", ring.fallback);
+      try { a.pause(); } catch (_) {}
+    }
+    ring.stopFallback = beepFallback(ring.finish);
+  };
+  activeRings.set(name, ring);
+  Music.setDucked(true);
+  ring.stopTimer = setTimeout(ring.finish, RING_SECONDS * 1000);
+  if (!a) { ring.fallback(); return; }
+  a.addEventListener("ended", ring.finish);
+  a.addEventListener("error", ring.fallback);
   try {
-    clearTimeout(_ringStopTimer);
     a.pause();
     a.currentTime = 0;
     const p = a.play();
-    if (p && p.catch) p.catch(() => beepFallback());
-    // 最多響 RING_SECONDS 秒就自動停
-    _ringStopTimer = setTimeout(() => { try { a.pause(); a.currentTime = 0; } catch (_) {} }, RING_SECONDS * 1000);
+    if (p && p.catch) p.catch(ring.fallback);
   } catch (_) {
-    beepFallback();
+    ring.fallback();
   }
 }
 
 function stopSound() {
-  clearTimeout(_ringStopTimer);
-  Object.values(SOUNDS).forEach(a => { try { a.pause(); a.currentTime = 0; } catch (_) {} });
+  activeRings.forEach((ring, name) => finishRing(name, ring));
 }
 
 function setSoundEnabled(target, on) {
   soundSettings[target] = !!on;
-  localStorage.setItem(`focus-sound-${target}`, soundSettings[target] ? "on" : "off");
+  appStorage.setItem(`focus-sound-${target}`, soundSettings[target] ? "on" : "off");
   if (!soundSettings[target]) stopSound();
 }
 
 // 找不到音檔時的備援提示音（用 Web Audio 合成嗶聲）
-function beepFallback() {
+function beepFallback(onEnded) {
+  let ctx;
+  const stop = () => {
+    if (ctx && ctx.state !== "closed") ctx.close().catch(() => {});
+  };
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") ctx.resume().catch(onEnded);
     let t = ctx.currentTime;
     for (let i = 0; i < 3; i++) {
       const osc = ctx.createOscillator();
@@ -70,10 +117,15 @@ function beepFallback() {
       osc.connect(gain).connect(ctx.destination);
       osc.start(t);
       osc.stop(t + 0.26);
+      if (i === 2) osc.onended = onEnded;
       t += 0.35;
     }
-    setTimeout(() => ctx.close(), 1500);
-  } catch (_) { /* 不支援就略過 */ }
+    return stop;
+  } catch (_) {
+    stop();
+    onEnded();
+    return null;
+  }
 }
 
 // DOM 載入後分別綁定番茄鐘 / 計時器音效開關，並套用記住的狀態
@@ -100,6 +152,24 @@ function closeAllMenus() {
   fadeOutSettingsPanel();
 }
 /* -------------------只有一個選單存在end------------------- */
+
+const helpDialog = document.getElementById('help-dialog');
+let helpReturnFocus = null;
+function openHelp() {
+  if (helpDialog.open) return;
+  helpReturnFocus = document.activeElement;
+  closeAllMenus();
+  helpDialog.showModal();
+  document.getElementById('help-close').focus();
+}
+document.getElementById('help-close').addEventListener('click', () => helpDialog.close());
+helpDialog.addEventListener('click', (event) => {
+  if (event.target === helpDialog) helpDialog.close();
+});
+helpDialog.addEventListener('close', () => {
+  if (helpReturnFocus?.isConnected) helpReturnFocus.focus();
+  helpReturnFocus = null;
+});
 
 
 /* -------------------右鍵選單start------------------- */
@@ -176,25 +246,54 @@ function fadeOut(callback) {
 
 /* -------------------設定面板start------------------- */
 const DEFAULT_WIDGET_SETTINGS = {
-  tomato: "#f05d5d",
-  stopwatch: "#b61db6",
-  timer: "#2684c7",
-  opacity: 28,
+  tomato: { color: "#f05d5d", opacity: 28 },
+  stopwatch: { color: "#b61db6", opacity: 28 },
+  timer: { color: "#2684c7", opacity: 28 },
+  clock: { color: "#ffffff", opacity: 0 },
+  toolbar: { color: "#1f1b30", opacity: 82 },
+  musicBar: { color: "#1f1b30", opacity: 80 },
+  musicPanel: { color: "#2a2440", opacity: 80 },
+  settingsPanel: { color: "#1f1b30", opacity: 86 },
+  helpPanel: { color: "#242037", opacity: 100 },
+  menus: { color: "#6850bd", opacity: 20 },
 };
 
-let widgetSettings = { ...DEFAULT_WIDGET_SETTINGS };
+function defaultWidgetSettings() {
+  return Object.fromEntries(Object.entries(DEFAULT_WIDGET_SETTINGS).map(([key, value]) => [key, { ...value }]));
+}
+
+let widgetSettings = defaultWidgetSettings();
+
+function validHex(value) { return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value); }
+function validOpacity(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, Math.round(number))) : null;
+}
 
 function loadWidgetSettings() {
+  widgetSettings = defaultWidgetSettings();
   try {
-    const saved = JSON.parse(localStorage.getItem("focus-widget-settings") || "{}");
-    widgetSettings = { ...DEFAULT_WIDGET_SETTINGS, ...saved };
-  } catch (_) {
-    widgetSettings = { ...DEFAULT_WIDGET_SETTINGS };
-  }
+    const saved = JSON.parse(appStorage.getItem("focus-widget-settings") || "{}");
+    const legacyOpacity = validOpacity(saved.opacity);
+    for (const key of Object.keys(widgetSettings)) {
+      const entry = saved[key] || (["settingsPanel", "helpPanel", "menus"].includes(key) ? saved.chrome : null);
+      if (validHex(entry)) {
+        widgetSettings[key].color = entry;
+        if (["tomato", "stopwatch", "timer"].includes(key) && legacyOpacity !== null) {
+          widgetSettings[key].opacity = legacyOpacity;
+        }
+      } else if (entry && typeof entry === 'object') {
+        if (validHex(entry.color)) widgetSettings[key].color = entry.color;
+        const opacity = validOpacity(entry.opacity);
+        if (opacity !== null) widgetSettings[key].opacity = opacity;
+      }
+    }
+  } catch (_) { /* Ignore damaged saved settings. */ }
 }
 
 function saveWidgetSettings() {
-  localStorage.setItem("focus-widget-settings", JSON.stringify(widgetSettings));
+  appStorage.setItem("focus-widget-settings", JSON.stringify(widgetSettings));
 }
 
 function hexToRgb(hex) {
@@ -213,13 +312,26 @@ function darkenHex(hex, amount = 0.28) {
   return `#${toHex(r * (1 - amount))}${toHex(g * (1 - amount))}${toHex(b * (1 - amount))}`;
 }
 
+function mixHex(from, to, amount) {
+  const first = hexToRgb(from);
+  const second = hexToRgb(to);
+  const channel = key => Math.round(first[key] * (1 - amount) + second[key] * amount).toString(16).padStart(2, '0');
+  return `#${channel('r')}${channel('g')}${channel('b')}`;
+}
+
+function isLightColor(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150;
+}
+
 function hexToRgba(hex, alpha) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function applyWidgetTheme(type, color) {
-  const opacity = Math.max(0.15, Math.min(0.75, widgetSettings.opacity / 100));
+function applyWidgetTheme(type) {
+  const { color, opacity: percent } = widgetSettings[type];
+  const opacity = percent / 100;
   const dark = darkenHex(color);
   const targets = {
     tomato: ["tomato-widget", "drag-handle"],
@@ -230,26 +342,102 @@ function applyWidgetTheme(type, color) {
   const widget = document.getElementById(widgetId);
   const header = document.getElementById(headerId);
   if (widget) widget.style.backgroundColor = hexToRgba(color, opacity);
-  if (header) header.style.backgroundColor = hexToRgba(dark, Math.min(opacity + 0.18, 0.9));
+  if (header) header.style.backgroundColor = hexToRgba(dark, Math.min(opacity * 1.18, 0.9));
 }
 
 function applyWidgetSettings() {
-  applyWidgetTheme("tomato", widgetSettings.tomato);
-  applyWidgetTheme("stopwatch", widgetSettings.stopwatch);
-  applyWidgetTheme("timer", widgetSettings.timer);
-  const value = document.getElementById("setting-opacity-value");
-  if (value) value.textContent = `${widgetSettings.opacity}%`;
+  ["tomato", "stopwatch", "timer"].forEach(applyWidgetTheme);
+  const clock = document.getElementById("clock");
+  if (clock) {
+    const { color, opacity } = widgetSettings.clock;
+    clock.style.color = color;
+    clock.style.backgroundColor = hexToRgba('#1f1b30', opacity / 100);
+  }
+  const panels = [
+    ["toolbar", [".focus-toolbar"], []],
+    ["musicBar", ["#music-player"], []],
+    ["musicPanel", ["#music-panel"], [".mp-panel-header"]],
+    ["settingsPanel", ["#settings-panel"], [".settings-header"]],
+    ["helpPanel", ["#help-dialog"], [".help-header"]],
+    ["menus", [".context-menu"], []],
+  ];
+  for (const [key, selectors, headers] of panels) {
+    const { color, opacity: percent } = widgetSettings[key];
+    for (const selector of selectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        element.style.backgroundColor = hexToRgba(color, percent / 100);
+        if (['toolbar', 'musicPanel', 'settingsPanel', 'menus'].includes(key)) {
+          element.style.backdropFilter = percent === 0 ? 'none' : '';
+          element.style.webkitBackdropFilter = percent === 0 ? 'none' : '';
+        }
+      }
+    }
+    for (const selector of headers) {
+      for (const element of document.querySelectorAll(selector)) {
+        element.style.backgroundColor = hexToRgba(darkenHex(color, 0.25), Math.min(percent / 100 * 1.12, 1));
+      }
+    }
+  }
+  const settings = document.getElementById('settings-panel');
+  if (settings) {
+    const base = widgetSettings.settingsPanel.color;
+    const light = isLightColor(base);
+    const control = light ? darkenHex(base, 0.1) : mixHex(base, '#ffffff', 0.12);
+    const hover = light ? darkenHex(base, 0.18) : mixHex(base, '#ffffff', 0.22);
+    settings.style.setProperty('--settings-text', light ? '#211c2c' : '#f8f7fc');
+    settings.style.setProperty('--settings-muted-text', light ? '#423d4b' : '#e6e1ef');
+    settings.style.setProperty('--settings-control', hexToRgba(control, 0.9));
+    settings.style.setProperty('--settings-control-solid', control);
+    settings.style.setProperty('--settings-control-hover', hexToRgba(hover, 0.96));
+    settings.style.setProperty('--settings-border', light ? 'rgba(25, 20, 35, 0.3)' : 'rgba(255, 255, 255, 0.25)');
+    settings.style.setProperty('--settings-accent', light ? darkenHex(base, 0.45) : mixHex(base, '#ffffff', 0.45));
+  }
+  const help = document.getElementById('help-dialog');
+  if (help) {
+    const base = widgetSettings.helpPanel.color;
+    const light = isLightColor(base);
+    help.style.setProperty('--help-text', light ? '#211c2c' : '#f8f7fc');
+    help.style.setProperty('--help-muted-text', light ? '#423d4b' : '#e0dce9');
+    help.style.setProperty('--help-scroll-track', light ? darkenHex(base, 0.08) : base);
+    help.style.setProperty('--help-scroll-thumb', light ? darkenHex(base, 0.34) : mixHex(base, '#ffffff', 0.34));
+    help.style.setProperty('--help-scroll-thumb-hover', light ? darkenHex(base, 0.48) : mixHex(base, '#ffffff', 0.48));
+  }
+  for (const [id, key, prefix] of [
+    ['focus-toolbar', 'toolbar', '--history-scroll'],
+    ['music-panel', 'musicPanel', '--music-scroll'],
+  ]) {
+    const panel = id === 'focus-toolbar' ? document.querySelectorAll('.focus-toolbar')[0] : document.getElementById(id);
+    if (!panel) continue;
+    const base = widgetSettings[key].color;
+    const light = isLightColor(base);
+    panel.style.setProperty(`${prefix}-track`, light ? darkenHex(base, 0.08) : base);
+    panel.style.setProperty(`${prefix}-thumb`, light ? darkenHex(base, 0.34) : mixHex(base, '#ffffff', 0.34));
+    panel.style.setProperty(`${prefix}-thumb-hover`, light ? darkenHex(base, 0.48) : mixHex(base, '#ffffff', 0.48));
+  }
+}
+
+function resetSelectedWidgetSettings() {
+  const key = document.getElementById('setting-component').value;
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_WIDGET_SETTINGS, key)) return;
+  widgetSettings[key] = { ...DEFAULT_WIDGET_SETTINGS[key] };
+  saveWidgetSettings();
+  syncSettingsInputs();
+}
+
+function resetAllWidgetSettings() {
+  widgetSettings = defaultWidgetSettings();
+  saveWidgetSettings();
+  syncSettingsInputs();
 }
 
 function syncSettingsInputs() {
-  const tomato = document.getElementById("setting-tomato-color");
-  const stopwatch = document.getElementById("setting-stopwatch-color");
-  const timer = document.getElementById("setting-timer-color");
+  const component = document.getElementById("setting-component");
+  const color = document.getElementById("setting-component-color");
   const opacity = document.getElementById("setting-widget-opacity");
-  if (tomato) tomato.value = widgetSettings.tomato;
-  if (stopwatch) stopwatch.value = widgetSettings.stopwatch;
-  if (timer) timer.value = widgetSettings.timer;
-  if (opacity) opacity.value = widgetSettings.opacity;
+  const selected = widgetSettings[component.value] || widgetSettings.tomato;
+  color.value = selected.color;
+  opacity.value = selected.opacity;
+  document.getElementById("setting-opacity-value").textContent = `${selected.opacity}%`;
   applyWidgetSettings();
 }
 
@@ -262,6 +450,21 @@ function placeFloatingPanel(panel) {
   panel.style.top = `${top}px`;
 }
 
+let settingsPosition = null;
+try {
+  const saved = JSON.parse(appStorage.getItem('focus-settings-position') || 'null');
+  if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) settingsPosition = saved;
+} catch (_) { /* Ignore invalid position. */ }
+
+function placeSettingsPanel(panel) {
+  if (!settingsPosition) { placeFloatingPanel(panel); return; }
+  const margin = 8;
+  const left = Math.max(margin, Math.min(window.innerWidth - panel.offsetWidth - margin, settingsPosition.left));
+  const top = Math.max(margin, Math.min(window.innerHeight - panel.offsetHeight - margin, settingsPosition.top));
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
 function openSettingsPanel() {
   fadeOut();
   const panel = document.getElementById("settings-panel");
@@ -270,7 +473,7 @@ function openSettingsPanel() {
   panel.classList.add("show");
   panel.classList.remove("hiding");
   panel.setAttribute("aria-hidden", "false");
-  requestAnimationFrame(() => placeFloatingPanel(panel));
+  requestAnimationFrame(() => placeSettingsPanel(panel));
 }
 
 function fadeOutSettingsPanel(callback) {
@@ -288,30 +491,54 @@ function fadeOutSettingsPanel(callback) {
 document.addEventListener("DOMContentLoaded", () => {
   loadWidgetSettings();
   syncSettingsInputs();
-  const bindings = [
-    ["setting-tomato-color", "tomato"],
-    ["setting-stopwatch-color", "stopwatch"],
-    ["setting-timer-color", "timer"],
-  ];
-  bindings.forEach(([id, key]) => {
-    const input = document.getElementById(id);
-    if (!input) return;
-    input.addEventListener("input", () => {
-      widgetSettings[key] = input.value;
-      applyWidgetSettings();
-      saveWidgetSettings();
-    });
-  });
+  const component = document.getElementById("setting-component");
+  const color = document.getElementById("setting-component-color");
   const opacity = document.getElementById("setting-widget-opacity");
-  if (opacity) {
-    opacity.addEventListener("input", () => {
-      widgetSettings.opacity = Number(opacity.value);
-      applyWidgetSettings();
-      saveWidgetSettings();
-    });
-  }
+  component.addEventListener("change", syncSettingsInputs);
+  color.addEventListener("input", () => {
+    widgetSettings[component.value].color = color.value;
+    applyWidgetSettings();
+    saveWidgetSettings();
+  });
+  opacity.addEventListener("input", () => {
+    widgetSettings[component.value].opacity = Number(opacity.value);
+    document.getElementById("setting-opacity-value").textContent = `${opacity.value}%`;
+    applyWidgetSettings();
+    saveWidgetSettings();
+  });
+  document.getElementById('setting-reset-selected').addEventListener('click', resetSelectedWidgetSettings);
+  document.getElementById('setting-reset-all').addEventListener('click', resetAllWidgetSettings);
   const close = document.getElementById("settings-close");
   if (close) close.addEventListener("click", () => fadeOutSettingsPanel());
+  const panel = document.getElementById('settings-panel');
+  const header = panel.querySelector('.settings-header');
+  let drag = null;
+  header.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('button')) return;
+    const rect = panel.getBoundingClientRect();
+    drag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    header.setPointerCapture(event.pointerId);
+    panel.classList.add('dragging');
+  });
+  header.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const margin = 8;
+    const left = Math.max(margin, Math.min(window.innerWidth - panel.offsetWidth - margin, event.clientX - drag.x));
+    const top = Math.max(margin, Math.min(window.innerHeight - panel.offsetHeight - margin, event.clientY - drag.y));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    settingsPosition = { left, top };
+  });
+  const endSettingsDrag = () => {
+    if (drag && settingsPosition) appStorage.setItem('focus-settings-position', JSON.stringify(settingsPosition));
+    drag = null;
+    panel.classList.remove('dragging');
+  };
+  header.addEventListener('pointerup', endSettingsDrag);
+  header.addEventListener('pointercancel', endSettingsDrag);
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('show') && settingsPosition) placeSettingsPanel(panel);
+  });
 });
 /* -------------------設定面板end------------------- */
 
@@ -521,32 +748,120 @@ let restDuration = 5 * 60;  // 秒
 let remainingTime = workDuration;
 let isWorking = true;       // true: 工作階段, false: 休息
 let timer = null;
+let tomatoDeadline = 0;
+
+const focusTaskInput = document.getElementById('focus-task');
+const focusTodayCount = document.getElementById('focus-today-count');
+const focusTaskProgress = document.getElementById('focus-task-progress');
+const focusHistoryList = document.getElementById('focus-history-list');
+let focusSessionTask = null;
+focusTaskInput.value = appStorage.getItem('focus-current-task') || '';
+focusTaskInput.addEventListener('input', () => {
+  appStorage.setItem('focus-current-task', focusTaskInput.value);
+  updateFocusCount();
+});
+
+function focusDayKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+let displayedFocusDay = '';
+function loadFocusSessions() {
+  try {
+    const saved = JSON.parse(appStorage.getItem('focus-sessions') || '[]');
+    return Array.isArray(saved) ? saved.filter(item =>
+      item && typeof item.task === 'string' && typeof item.day === 'string' &&
+      Number.isFinite(item.minutes) && Number.isFinite(item.finishedAt)) : [];
+  } catch (_) { return []; }
+}
+
+function saveFocusSession() {
+  const sessions = loadFocusSessions();
+  sessions.push({
+    task: focusSessionTask || '未命名專注',
+    minutes: Math.round(workDuration / 60),
+    day: focusDayKey(),
+    finishedAt: Date.now(),
+  });
+  appStorage.setItem('focus-sessions', JSON.stringify(sessions.slice(-200)));
+  focusSessionTask = null;
+  updateFocusCount();
+}
+
+function updateFocusCount() {
+  const day = focusDayKey();
+  let record;
+  try { record = JSON.parse(appStorage.getItem('focus-daily-count') || '{}'); }
+  catch (_) { record = {}; }
+  const sessions = loadFocusSessions();
+  const today = sessions.filter(item => item.day === day);
+  const previousCount = record.day === day ? Number(record.count) || 0 : 0;
+  const minutes = today.reduce((total, item) => total + item.minutes, 0);
+  focusTodayCount.textContent = `今日完成 ${previousCount + today.length} 次・${minutes} 分鐘`;
+  const currentTask = focusTaskInput.value.trim();
+  if (currentTask) {
+    const taskSessions = today.filter(item => item.task === currentTask);
+    const taskMinutes = taskSessions.reduce((total, item) => total + item.minutes, 0);
+    focusTaskProgress.textContent = `這項事項：${taskSessions.length} 次・${taskMinutes} 分鐘`;
+  } else {
+    focusTaskProgress.textContent = '開始番茄鐘後，完成的工作階段會記在這項事項下';
+  }
+  focusHistoryList.replaceChildren();
+  for (const session of sessions.slice(-10).reverse()) {
+    const item = document.createElement('li');
+    const time = new Date(session.finishedAt).toLocaleString('zh-TW', {
+      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+    item.textContent = `${time} · ${session.task} · ${session.minutes} 分鐘`;
+    focusHistoryList.appendChild(item);
+  }
+  if (!focusHistoryList.children.length) {
+    const empty = document.createElement('li');
+    empty.textContent = '完成第一段番茄鐘後，紀錄會出現在這裡。';
+    focusHistoryList.appendChild(empty);
+  }
+  displayedFocusDay = day;
+}
+updateFocusCount();
+setInterval(() => {
+  if (focusDayKey() !== displayedFocusDay) updateFocusCount();
+}, 60000);
+
+function tickTomato() {
+  remainingTime = Math.max(0, Math.ceil((tomatoDeadline - Date.now()) / 1000));
+  updateDisplay();
+  if (remainingTime > 0) return;
+  clearInterval(timer);
+  timer = null;
+  if (isWorking) saveFocusSession();
+  isWorking = !isWorking;
+  remainingTime = isWorking ? workDuration : restDuration;
+  updatePhaseText();
+  updateDisplay();
+  playSound("bell");
+  startTimer();
+}
 
 function startTimer() {  //開始計時器
   if (timer) return;
-  timer = setInterval(() => {
-    if (remainingTime <= 0) {
-      clearInterval(timer);
-      timer = null;
-      isWorking = !isWorking;
-      remainingTime = isWorking ? workDuration : restDuration;
-      updatePhaseText();
-      playSound("bell");   // 階段結束鈴聲
-      startTimer(); // 自動切換並繼續
-    } else {
-      remainingTime--;
-      updateDisplay();
-    }
-  }, 1000);
+  if (isWorking && focusSessionTask === null) {
+    focusSessionTask = focusTaskInput.value.trim() || '未命名專注';
+  }
+  tomatoDeadline = Date.now() + remainingTime * 1000;
+  timer = setInterval(tickTomato, 250);
 }
 
 function pauseTimer() {  //暫停計時器
+  if (timer) remainingTime = Math.max(0, Math.ceil((tomatoDeadline - Date.now()) / 1000));
   clearInterval(timer);
   timer = null;
+  updateDisplay();
 }
 
 function resetTimer() {  //重製計時器
   pauseTimer();
+  if (isWorking) focusSessionTask = null;
   remainingTime = isWorking ? workDuration : restDuration;
   updateDisplay();
 }
@@ -563,12 +878,30 @@ function updatePhaseText() {  //顯示工作or休息
 }
 
 function applySettings() {  //套用設定
-  const work = parseInt(document.getElementById('work-input').value);
-  const rest = parseInt(document.getElementById('rest-input').value);
+  const workInput = document.getElementById('work-input');
+  const restInput = document.getElementById('rest-input');
+  const work = Math.min(180, Math.max(1, parseInt(workInput.value, 10) || 25));
+  const rest = Math.min(60, Math.max(1, parseInt(restInput.value, 10) || 5));
+  workInput.value = work;
+  restInput.value = rest;
   workDuration = work * 60;
   restDuration = rest * 60;
+  appStorage.setItem('focus-tomato-durations', JSON.stringify({ work, rest }));
   resetTimer();
 }
+
+try {
+  const savedDurations = JSON.parse(appStorage.getItem('focus-tomato-durations') || '{}');
+  if (Number.isInteger(savedDurations.work) && savedDurations.work >= 1 && savedDurations.work <= 180 &&
+      Number.isInteger(savedDurations.rest) && savedDurations.rest >= 1 && savedDurations.rest <= 60) {
+    workDuration = savedDurations.work * 60;
+    restDuration = savedDurations.rest * 60;
+    remainingTime = workDuration;
+    document.getElementById('work-input').value = savedDurations.work;
+    document.getElementById('rest-input').value = savedDurations.rest;
+    updateDisplay();
+  }
+} catch (_) { /* Keep the defaults if saved settings are invalid. */ }
 
 
 // ------番茄鐘功能end------
@@ -934,6 +1267,8 @@ document.addEventListener('mouseup', () => {
 /* -------------------碼表start------------------- */
 let stopwatchTimer = null;
 let stopwatchSeconds = 0;
+let stopwatchStartedAt = 0;
+let stopwatchElapsedMs = 0;
 const stopwatchDisplay = document.getElementById("stopwatch-display");
 
 function showStopwatch() {
@@ -1008,19 +1343,24 @@ document.addEventListener('mouseup', () => {
 // ------碼表功能start------
 function startStopwatch() {  //開始碼表
   if (stopwatchTimer) return;
+  stopwatchStartedAt = Date.now();
   stopwatchTimer = setInterval(() => {
-    stopwatchSeconds++;
+    stopwatchSeconds = Math.floor((stopwatchElapsedMs + Date.now() - stopwatchStartedAt) / 1000);
     updateStopwatchDisplay();
-  }, 1000);
+  }, 250);
 }
 
 function pauseStopwatch() {  //暫停碼表
+  if (stopwatchTimer) stopwatchElapsedMs += Date.now() - stopwatchStartedAt;
+  stopwatchSeconds = Math.floor(stopwatchElapsedMs / 1000);
   clearInterval(stopwatchTimer);
   stopwatchTimer = null;
+  updateStopwatchDisplay();
 }
 
 function resetStopwatch() {  //重設碼表
   pauseStopwatch();
+  stopwatchElapsedMs = 0;
   stopwatchSeconds = 0;
   updateStopwatchDisplay();
 }
@@ -1379,7 +1719,7 @@ document.addEventListener('mouseup', () => {
 /*
   曲目清單：背景影片同時也是音樂來源。
   以 Lofi Girl 的長期直播為主（多年穩定不下架）。
-  想新增 / 更換，只要改下面的 id（YouTube 網址 watch?v= 後面那段）與 category 即可。
+  使用者可以在音樂面板管理曲目，清單會保存在本機設定中。
 */
 const MUSIC_TRACKS = [
   { title: "Lofi Girl · lofi hip hop radio 📚",     id: "rFZHOHl-L8A", category: "lofigirl" },
@@ -1416,16 +1756,71 @@ const MUSIC_TRACKS = [
   { title: "空靈 · 432Hz 北歐冥想",                id: "WaNH_GQ9l_Q", category: "ethereal" },
   { title: "Best of lofi hip hop ✨ relax/study", id: "n61ULEU7CO0", category: "study" },
   { title: "1 A.M Study Session 📚",              id: "lTRiuFIWV54", category: "study" },
+  { title: "輝夜姬 · みんなで寄り添うソファの夜 Jazz", id: "szIYR5oIyrI", category: "user:輝夜姬" },
+  { title: "輝夜姬 · かぐやたちと過ごす穏やかな夜 Jazz", id: "vBt--L0irw0", category: "user:輝夜姬" },
+  { title: "輝夜姬 · ヤチヨと過ごすツクヨミの夜 Jazz", id: "6STyP7fck84", category: "user:輝夜姬" },
+  { title: "輝夜姬 · DJかぐやと駆け抜ける夜 EDM", id: "B8pUkuGJa3A", category: "user:輝夜姬" },
+  { title: "輝夜姬 · いろはがかぐやの髪をとかす夜 Jazz", id: "W1Fa_oG9SpM", category: "user:輝夜姬" },
 ];
 
 const MUSIC_CATEGORIES = [
-  { key: "all",   label: "全部 ✨" },
-  { key: "lofigirl", label: "Lofi Girl 👧" },
-  { key: "dreamairlines", label: "Dream Airlines ✈️" },
-  { key: "abao", label: "阿鮑Abao 🌧️" },
-  { key: "ethereal", label: "空靈 🫧" },
-  { key: "study", label: "Study 📚" },
+  { key: "all", name: "全部", label: "全部 ✨" },
+  { key: "custom", name: "自訂", label: "自訂 🎵" },
+  { key: "lofigirl", name: "Lofi Girl", label: "Lofi Girl 👧" },
+  { key: "dreamairlines", name: "Dream Airlines", label: "Dream Airlines ✈️" },
+  { key: "abao", name: "阿鮑Abao", label: "阿鮑Abao 🌧️" },
+  { key: "ethereal", name: "空靈", label: "空靈 🫧" },
+  { key: "study", name: "Study", label: "Study 📚" },
 ];
+
+const KAGUYA_TRACK_IDS = new Set(['szIYR5oIyrI', 'vBt--L0irw0', '6STyP7fck84', 'B8pUkuGJa3A', 'W1Fa_oG9SpM']);
+
+function validMusicCategory(key) {
+  return typeof key === 'string' && (
+    MUSIC_CATEGORIES.some(category => category.key === key && key !== 'all') ||
+    (key.startsWith('user:') && key.slice(5).length <= 40 && key.slice(5).trim() && !/[\u0000-\u001f]/.test(key))
+  );
+}
+
+function musicCategoryName(key) {
+  return MUSIC_CATEGORIES.find(category => category.key === key)?.name || key.slice(5);
+}
+
+try {
+  const savedTracks = JSON.parse(appStorage.getItem('focus-music-tracks') || 'null');
+  if (Array.isArray(savedTracks) && savedTracks.length) {
+    const validTracks = savedTracks.filter(track => track && typeof track.title === 'string' &&
+      track.title.trim() && typeof track.id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(track.id) &&
+      validMusicCategory(track.category));
+    if (validTracks.length) {
+      if (appStorage.getItem('focus-music-library-version') !== '2') {
+        for (const track of MUSIC_TRACKS.filter(item => KAGUYA_TRACK_IDS.has(item.id))) {
+          const existing = validTracks.find(item => item.id === track.id);
+          if (existing) existing.category = 'user:輝夜姬';
+          else validTracks.push(track);
+        }
+        appStorage.setItem('focus-music-tracks', JSON.stringify(validTracks));
+      }
+      MUSIC_TRACKS.splice(0, MUSIC_TRACKS.length, ...validTracks);
+    }
+  }
+} catch (_) { /* Damaged saved playlist falls back to built-in tracks. */ }
+appStorage.setItem('focus-music-library-version', '2');
+
+function youtubeVideoId(value) {
+  try {
+    const url = new URL(value.trim());
+    if (!['https:', 'http:'].includes(url.protocol)) return null;
+    const host = url.hostname.toLowerCase();
+    let id = null;
+    if (host === 'youtu.be' || host === 'www.youtu.be') id = url.pathname.slice(1).split('/')[0];
+    else if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host)) {
+      if (url.pathname === '/watch') id = url.searchParams.get('v');
+      else if (/^\/(live|shorts|embed)\//.test(url.pathname)) id = url.pathname.split('/')[2];
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id || '') ? id : null;
+  } catch (_) { return null; }
+}
 
 const Music = (() => {
   let player = null;
@@ -1435,8 +1830,20 @@ const Music = (() => {
   let muted = true;          // 為了自動播放先靜音，使用者一互動就解除
   let userUnmuted = false;
   let lastVolume = 50;
+  const DUCK_VOLUME_RATIO = 0.2;
+  let ducked = false;
   let pollTimer = null;
   let seeking = false;
+
+  // Keep the user's volume separate from the temporary reminder attenuation.
+  function applyVolume() {
+    if (ready) player.setVolume(lastVolume * (ducked ? DUCK_VOLUME_RATIO : 1));
+  }
+
+  function setDucked(on) {
+    ducked = !!on;
+    applyVolume();
+  }
 
   // ----- DOM -----
   const el = {
@@ -1452,6 +1859,15 @@ const Music = (() => {
     volume:   document.getElementById("mp-volume"),
     tracklist: document.getElementById("mp-tracklist"),
     categories: document.getElementById("mp-categories"),
+    manageToggle: document.getElementById("mp-manage-toggle"),
+    manageForm: document.getElementById("mp-manage-form"),
+    addUrl: document.getElementById("mp-add-url"),
+    addTitle: document.getElementById("mp-add-title"),
+    categoryToggle: document.getElementById("mp-category-toggle"),
+    categoryFields: document.getElementById("mp-category-fields"),
+    addCategory: document.getElementById("mp-add-category"),
+    categorySuggestions: document.getElementById("mp-category-suggestions"),
+    manageMessage: document.getElementById("mp-manage-message"),
   };
 
   function fmtTime(sec) {
@@ -1493,9 +1909,10 @@ const Music = (() => {
   }
 
   function onReady(e) {
+    player = e.target;
     ready = true;
     e.target.mute();
-    e.target.setVolume(lastVolume);
+    applyVolume();
     e.target.playVideo();
     el.volume.value = lastVolume;
     updateTrackList();
@@ -1555,7 +1972,7 @@ const Music = (() => {
       userUnmuted = true;
       muted = false;
       player.unMute();
-      player.setVolume(lastVolume);
+      applyVolume();
       el.mute.textContent = "🔊";
     }
   }
@@ -1576,7 +1993,8 @@ const Music = (() => {
     el.title.textContent = track.title;
     if (ready) {
       player.loadVideoById(track.id);
-      if (muted) player.mute(); else { player.unMute(); player.setVolume(lastVolume); }
+      applyVolume();
+      if (muted) player.mute(); else player.unMute();
     }
     updateTrackList();
   }
@@ -1593,7 +2011,7 @@ const Music = (() => {
     lastVolume = Number(v);
     if (!ready) return;
     ensureUnmuted();
-    player.setVolume(lastVolume);
+    applyVolume();
     if (lastVolume === 0) { muted = true; player.mute(); el.mute.textContent = "🔇"; }
     else { muted = false; player.unMute(); el.mute.textContent = lastVolume < 50 ? "🔉" : "🔊"; }
   }
@@ -1602,15 +2020,90 @@ const Music = (() => {
     if (!ready) return;
     muted = !muted;
     if (muted) { player.mute(); el.mute.textContent = "🔇"; }
-    else { userUnmuted = true; player.unMute(); player.setVolume(lastVolume || 50); el.mute.textContent = "🔊"; }
+    else {
+      userUnmuted = true;
+      lastVolume = lastVolume || 50;
+      el.volume.value = lastVolume;
+      applyVolume();
+      player.unMute();
+      el.mute.textContent = lastVolume < 50 ? "🔉" : "🔊";
+    }
   }
 
   // ----- 曲目清單 / 分類 -----
   let activeCategory = "all";
+  let managing = false;
+  let choosingCategory = false;
+
+  function availableCategories() {
+    const used = new Set(MUSIC_TRACKS.map(track => track.category));
+    const builtIn = MUSIC_CATEGORIES.filter(category => category.key === 'all' || used.has(category.key));
+    const userCategories = [...used].filter(key => key.startsWith('user:'))
+      .map(key => ({ key, name: musicCategoryName(key), label: musicCategoryName(key) }));
+    return [...builtIn, ...userCategories];
+  }
+
+  function categoryForName(name) {
+    const normalized = name.trim().toLocaleLowerCase();
+    return [...MUSIC_CATEGORIES, ...availableCategories()].find(category => category.key !== 'all' &&
+      (category.name.toLocaleLowerCase() === normalized || category.label.toLocaleLowerCase() === normalized))?.key ||
+      `user:${name.trim()}`;
+  }
+
+  function saveTracks() {
+    appStorage.setItem('focus-music-tracks', JSON.stringify(MUSIC_TRACKS));
+  }
+
+  function addTrack(event) {
+    event.preventDefault();
+    const id = youtubeVideoId(el.addUrl.value);
+    if (!id) { el.manageMessage.textContent = '請貼上有效的 YouTube 影片網址。'; return; }
+    if (MUSIC_TRACKS.some(track => track.id === id)) {
+      el.manageMessage.textContent = '這首音樂已在清單中。';
+      return;
+    }
+    const categoryName = el.addCategory.value.trim();
+    if (choosingCategory && !categoryName) {
+      el.manageMessage.textContent = '請輸入要加入的分類名稱。';
+      return;
+    }
+    if (choosingCategory && categoryName.toLocaleLowerCase() === '全部') {
+      el.manageMessage.textContent = '「全部」是所有曲目的總覽，請輸入其他分類名稱。';
+      return;
+    }
+    const category = choosingCategory ? categoryForName(categoryName) : 'custom';
+    const title = el.addTitle.value.trim() || `自訂音樂 · ${id}`;
+    MUSIC_TRACKS.push({ title, id, category });
+    saveTracks();
+    activeCategory = category;
+    renderCategories();
+    updateTrackList();
+    el.addUrl.value = '';
+    el.addTitle.value = '';
+    el.manageMessage.textContent = `已新增「${title}」。`;
+  }
+
+  function deleteTrack(index) {
+    if (MUSIC_TRACKS.length <= 1) {
+      el.manageMessage.textContent = '請至少保留一首音樂。';
+      return;
+    }
+    const [removed] = MUSIC_TRACKS.splice(index, 1);
+    saveTracks();
+    if (!MUSIC_TRACKS.some(track => track.category === activeCategory)) activeCategory = 'all';
+    renderCategories();
+    if (index === currentIndex) loadIndex(Math.min(index, MUSIC_TRACKS.length - 1));
+    else {
+      if (index < currentIndex) currentIndex--;
+      updateTrackList();
+    }
+    el.manageMessage.textContent = `已刪除「${removed.title}」。`;
+  }
 
   function renderCategories() {
     el.categories.innerHTML = "";
-    MUSIC_CATEGORIES.forEach(cat => {
+    el.categorySuggestions.innerHTML = "";
+    availableCategories().forEach(cat => {
       const btn = document.createElement("button");
       btn.className = "mp-cat" + (cat.key === activeCategory ? " active" : "");
       btn.textContent = cat.label;
@@ -1620,6 +2113,11 @@ const Music = (() => {
         updateTrackList();
       };
       el.categories.appendChild(btn);
+      if (cat.key !== 'all' && cat.key !== 'custom') {
+        const option = document.createElement('option');
+        option.value = cat.name;
+        el.categorySuggestions.appendChild(option);
+      }
     });
   }
 
@@ -1635,7 +2133,20 @@ const Music = (() => {
       span.textContent = track.title;
       li.appendChild(dot);
       li.appendChild(span);
-      li.onclick = () => { loadIndex(i); ensureUnmuted(); player && player.playVideo(); };
+      li.onclick = () => {
+        loadIndex(i);
+        ensureUnmuted();
+        if (ready) player.playVideo();
+      };
+      if (managing) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'mp-remove';
+        remove.textContent = '刪除';
+        remove.setAttribute('aria-label', `刪除 ${track.title}`);
+        remove.onclick = event => { event.stopPropagation(); deleteTrack(i); };
+        li.appendChild(remove);
+      }
       el.tracklist.appendChild(li);
     });
   }
@@ -1672,6 +2183,23 @@ const Music = (() => {
     el.loop.onclick  = toggleLoop;
     el.mute.onclick  = toggleMute;
     el.volume.oninput = (e) => setVolume(e.target.value);
+    el.manageToggle.onclick = () => {
+      managing = !managing;
+      el.manageForm.hidden = !managing;
+      el.manageToggle.textContent = managing ? '完成' : '管理曲目';
+      el.manageToggle.setAttribute('aria-expanded', String(managing));
+      el.manageMessage.textContent = '';
+      updateTrackList();
+    };
+    el.manageForm.addEventListener('submit', addTrack);
+    el.categoryToggle.onclick = () => {
+      choosingCategory = !choosingCategory;
+      el.categoryFields.hidden = !choosingCategory;
+      el.categoryToggle.setAttribute('aria-expanded', String(choosingCategory));
+      el.categoryToggle.textContent = choosingCategory ? '使用自訂分類' : '指定分類（預設自訂）';
+      el.manageMessage.textContent = '';
+      if (choosingCategory) el.addCategory.focus();
+    };
 
     // 進度條拖曳（直播時 disabled，不會觸發）
     el.progress.addEventListener("mousedown", () => { seeking = true; });
@@ -1705,9 +2233,10 @@ const Music = (() => {
   }
 
   bind();
-  init();
+  // Let the controls paint before starting the heavier YouTube iframe API.
+  setTimeout(init, 250);
 
-  return { setSleepTimer, loadIndex, next, prev, togglePlay };
+  return { setSleepTimer, loadIndex, next, prev, togglePlay, setDucked };
 })();
 
 /* ----- 音樂面板開關 ----- */
@@ -1779,8 +2308,19 @@ function toggleMusicPanel() {
 let countdownTotal = 5 * 60;   // 預設 5 分鐘
 let countdownRemaining = countdownTotal;
 let countdownTimer = null;
+let countdownDeadline = 0;
+
+function tickCountdown() {
+  countdownRemaining = Math.max(0, Math.ceil((countdownDeadline - Date.now()) / 1000));
+  updateCountdownDisplay();
+  if (countdownRemaining > 0) return;
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  onCountdownFinished();
+}
 
 function showTimer() {
+  if (timerWidgetEl.classList.contains("minimized")) restoreTimerFromIcon();
   const widget = document.getElementById("timer-widget");
   widget.style.display = "block";
   requestAnimationFrame(() => widget.classList.add("show"));
@@ -1819,20 +2359,15 @@ function startCountdown() {
   }
   if (countdownRemaining <= 0) return;
   document.getElementById("countdown-display").classList.remove("finished");
-  countdownTimer = setInterval(() => {
-    countdownRemaining--;
-    updateCountdownDisplay();
-    if (countdownRemaining <= 0) {
-      clearInterval(countdownTimer);
-      countdownTimer = null;
-      onCountdownFinished();
-    }
-  }, 1000);
+  countdownDeadline = Date.now() + countdownRemaining * 1000;
+  countdownTimer = setInterval(tickCountdown, 250);
 }
 
 function pauseCountdown() {
+  if (countdownTimer) countdownRemaining = Math.max(0, Math.ceil((countdownDeadline - Date.now()) / 1000));
   clearInterval(countdownTimer);
   countdownTimer = null;
+  updateCountdownDisplay();
 }
 
 function resetCountdown() {
@@ -1896,10 +2431,11 @@ function restoreTimerFromIcon() {
 }
 
 function minimizeTimer() {
-  const isNowMinimized = timerWidgetEl.classList.toggle("minimized");
-  const rect = timerWidgetEl.getBoundingClientRect();
-  if (isNowMinimized) {
+  if (!timerWidgetEl.classList.contains("minimized")) {
+    // Measure before applying the compact CSS, or the restored width becomes 160px.
+    const rect = timerWidgetEl.getBoundingClientRect();
     rememberedTimerSize = { width: rect.width, height: rect.height };
+    timerWidgetEl.classList.add("minimized");
     timerWidgetEl.style.removeProperty("width");
     timerWidgetEl.style.removeProperty("height");
     timerIcon.style.display = "flex";
@@ -1926,7 +2462,8 @@ timerIcon.addEventListener("mouseenter", () => {
 timerIcon.addEventListener("mouseleave", () => {
   if (!timerWidgetEl.classList.contains("minimized") || timerIconDragging) return;
   setTimeout(() => {
-    if (!timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
+    if (timerWidgetEl.classList.contains("minimized") &&
+        !timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
       timerWidgetEl.style.display = "none";
     }
   }, 100);
@@ -1935,7 +2472,8 @@ timerIcon.addEventListener("mouseleave", () => {
 timerWidgetEl.addEventListener("mouseleave", () => {
   if (!timerWidgetEl.classList.contains("minimized") || timerIconDragging) return;
   setTimeout(() => {
-    if (!timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
+    if (timerWidgetEl.classList.contains("minimized") &&
+        !timerWidgetEl.matches(":hover") && !timerIcon.matches(":hover")) {
       timerWidgetEl.style.display = "none";
     }
   }, 100);
@@ -1964,8 +2502,6 @@ document.addEventListener("mouseup", () => {
 });
 
 timerDragHandle.addEventListener("dblclick", () => {
-  const rect = timerWidgetEl.getBoundingClientRect();
-  rememberedTimerSize = { width: rect.width, height: rect.height };
   minimizeTimer();
 });
 
@@ -2030,4 +2566,246 @@ timerDragHandle.addEventListener("dblclick", () => {
   updateCountdownDisplay();
 })();
 /* =================== 計時器 (倒數) end =================== */
+
+/* =================== 自訂背景與原影片小窗 =================== */
+const Background = (() => {
+  const modes = new Set(['youtube', 'photo', 'slideshow', 'video']);
+  const el = {
+    layer: document.getElementById('custom-background'),
+    photo: document.getElementById('background-photo'),
+    video: document.getElementById('background-video'),
+    shell: document.getElementById('youtube-shell'),
+    close: document.getElementById('pip-close'),
+    resize: document.getElementById('pip-resize'),
+    mode: document.getElementById('background-mode'),
+    photos: document.getElementById('background-choose-photos'),
+    photoCount: document.getElementById('background-photo-count'),
+    chooseVideo: document.getElementById('background-choose-video'),
+    videoName: document.getElementById('background-video-name'),
+    interval: document.getElementById('background-interval'),
+    intervalValue: document.getElementById('background-interval-value'),
+    showOriginal: document.getElementById('background-show-original'),
+    status: document.getElementById('background-status'),
+  };
+  let library = { images: [], video: null };
+  let mode = appStorage.getItem('focus-background-mode') || 'youtube';
+  if (!modes.has(mode)) mode = 'youtube';
+  let showOriginal = appStorage.getItem('focus-show-original-video') !== 'off';
+  let intervalSeconds = Math.max(3, Math.min(30, Number(appStorage.getItem('focus-background-interval')) || 10));
+  let slideIndex = 0;
+  let slideshowTimer = null;
+  let fadeTimer = null;
+  let dragging = null;
+  let resizing = null;
+  let pipPosition = null;
+  let pipSize = { width: 320, height: 212 };
+  try { pipPosition = JSON.parse(appStorage.getItem('focus-pip-position') || 'null'); }
+  catch (_) { pipPosition = null; }
+  try {
+    const saved = JSON.parse(appStorage.getItem('focus-pip-size') || 'null');
+    if (saved && Number.isFinite(saved.width) && Number.isFinite(saved.height)) {
+      pipSize = { width: Math.max(200, saved.width), height: Math.max(200, saved.height) };
+    }
+  } catch (_) { /* Use default size. */ }
+
+  function setStatus(message) { el.status.textContent = message; }
+
+  function showSlide(index, fade = false) {
+    if (!library.images.length) return;
+    const image = library.images[index % library.images.length];
+    clearTimeout(fadeTimer);
+    if (fade) el.photo.classList.add('fading');
+    fadeTimer = setTimeout(() => {
+      el.photo.src = image.url;
+      el.photo.classList.remove('fading');
+    }, fade ? 220 : 0);
+  }
+
+  function positionPip() {
+    if (pipPosition && Number.isFinite(pipPosition.left) && Number.isFinite(pipPosition.top)) {
+      const left = Math.max(0, Math.min(window.innerWidth - el.shell.offsetWidth, pipPosition.left));
+      const top = Math.max(0, Math.min(window.innerHeight - el.shell.offsetHeight, pipPosition.top));
+      el.shell.style.left = `${left}px`;
+      el.shell.style.top = `${top}px`;
+      el.shell.style.right = 'auto';
+      el.shell.style.bottom = 'auto';
+    } else {
+      el.shell.style.left = '';
+      el.shell.style.top = '';
+      el.shell.style.right = '';
+      el.shell.style.bottom = '';
+    }
+  }
+
+  function applyPipSize() {
+    el.shell.style.width = `${Math.min(pipSize.width, Math.max(1, window.innerWidth - 16))}px`;
+    el.shell.style.height = `${Math.min(pipSize.height, Math.max(1, window.innerHeight - 16))}px`;
+  }
+
+  function render() {
+    clearInterval(slideshowTimer);
+    clearTimeout(fadeTimer);
+    const hasPhotos = library.images.length > 0;
+    const ready = mode === 'photo' || mode === 'slideshow' ? hasPhotos
+      : mode === 'video' ? !!library.video : false;
+    const custom = mode !== 'youtube' && ready;
+    el.mode.value = mode;
+    el.interval.value = intervalSeconds;
+    el.intervalValue.textContent = `${intervalSeconds} 秒`;
+    el.interval.parentElement.hidden = mode !== 'slideshow';
+    el.photoCount.textContent = hasPhotos ? `已選 ${library.images.length} 張照片` : '尚未選擇照片';
+    el.videoName.textContent = library.video?.name || '尚未選擇影片';
+    el.showOriginal.checked = showOriginal;
+    el.showOriginal.disabled = !custom;
+    el.layer.classList.toggle('active', custom);
+    el.photo.style.display = custom && mode !== 'video' ? 'block' : 'none';
+    el.video.style.display = custom && mode === 'video' ? 'block' : 'none';
+
+    if (custom && mode !== 'video') {
+      if (mode === 'photo') slideIndex = 0;
+      showSlide(slideIndex);
+      if (mode === 'slideshow' && library.images.length > 1) {
+        slideshowTimer = setInterval(() => {
+          slideIndex = (slideIndex + 1) % library.images.length;
+          showSlide(slideIndex, true);
+        }, intervalSeconds * 1000);
+      }
+      el.video.pause();
+    } else if (custom && mode === 'video') {
+      if (el.video.getAttribute('src') !== library.video.url) {
+        el.video.src = library.video.url;
+        el.video.load();
+      }
+      el.video.play().catch(() => setStatus('影片無法播放，請改選 MP4、WebM 或 Ogg 影片。'));
+    } else {
+      el.video.pause();
+    }
+
+    el.shell.classList.toggle('pip', custom);
+    el.shell.classList.toggle('hidden', custom && !showOriginal);
+    el.shell.setAttribute('aria-hidden', String(!custom || !showOriginal));
+    if (custom) { applyPipSize(); positionPip(); }
+    else {
+      el.shell.style.left = '';
+      el.shell.style.top = '';
+      el.shell.style.right = '';
+      el.shell.style.bottom = '';
+      el.shell.style.width = '';
+      el.shell.style.height = '';
+    }
+    if (mode !== 'youtube' && !ready) setStatus(mode === 'video' ? '請先選擇背景影片。' : '請先選擇背景照片。');
+    else if (custom) setStatus('原本影片可直接拖動，從右下角調整大小，或按 ✕ 隱藏畫面。');
+    else setStatus('目前使用原本影片作為背景。');
+  }
+
+  async function choose(kind) {
+    el.photos.disabled = true;
+    el.chooseVideo.disabled = true;
+    try {
+      setStatus('正在儲存背景檔案，請稍候…');
+      const selected = await window.electronAPI.chooseBackground(kind);
+      if (!selected) { render(); return; }
+      library = selected;
+      slideIndex = 0;
+      mode = kind === 'video' ? 'video' : library.images.length > 1 ? 'slideshow' : 'photo';
+      appStorage.setItem('focus-background-mode', mode);
+      render();
+    } catch (error) {
+      setStatus(`無法選取檔案：${error.message || '請再試一次'}`);
+    } finally {
+      el.photos.disabled = false;
+      el.chooseVideo.disabled = false;
+    }
+  }
+
+  el.mode.addEventListener('change', () => {
+    mode = el.mode.value;
+    appStorage.setItem('focus-background-mode', mode);
+    render();
+  });
+  el.photos.addEventListener('click', () => choose('images'));
+  el.chooseVideo.addEventListener('click', () => choose('video'));
+  el.interval.addEventListener('input', () => {
+    intervalSeconds = Number(el.interval.value);
+    appStorage.setItem('focus-background-interval', intervalSeconds);
+    render();
+  });
+  el.showOriginal.addEventListener('change', () => {
+    showOriginal = el.showOriginal.checked;
+    appStorage.setItem('focus-show-original-video', showOriginal ? 'on' : 'off');
+    render();
+  });
+  el.close.addEventListener('click', () => {
+    showOriginal = false;
+    appStorage.setItem('focus-show-original-video', 'off');
+    render();
+  });
+  el.photo.addEventListener('error', () => setStatus('照片已移動或無法讀取，請重新選擇。'));
+  el.video.addEventListener('error', () => {
+    if (mode === 'video') setStatus('影片已移動、格式不支援或無法讀取，請重新選擇。');
+  });
+
+  el.shell.addEventListener('pointerdown', event => {
+    if (!el.shell.classList.contains('pip') || event.button !== 0 || event.target.closest('button, .pip-resize')) return;
+    const rect = el.shell.getBoundingClientRect();
+    dragging = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    el.shell.setPointerCapture(event.pointerId);
+  });
+  el.shell.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    pipPosition = {
+      left: Math.max(0, Math.min(window.innerWidth - el.shell.offsetWidth, dragging.left + event.clientX - dragging.x)),
+      top: Math.max(0, Math.min(window.innerHeight - el.shell.offsetHeight, dragging.top + event.clientY - dragging.y)),
+    };
+    positionPip();
+  });
+  const endDrag = () => {
+    if (dragging && pipPosition) appStorage.setItem('focus-pip-position', JSON.stringify(pipPosition));
+    dragging = null;
+  };
+  el.shell.addEventListener('pointerup', endDrag);
+  el.shell.addEventListener('pointercancel', endDrag);
+
+  el.resize.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    const rect = el.shell.getBoundingClientRect();
+    pipPosition = { left: rect.left, top: rect.top };
+    resizing = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, left: rect.left, top: rect.top };
+    positionPip();
+    el.resize.setPointerCapture(event.pointerId);
+  });
+  el.resize.addEventListener('pointermove', event => {
+    if (!resizing) return;
+    const maxWidth = Math.max(1, window.innerWidth - resizing.left - 8);
+    const maxHeight = Math.max(1, window.innerHeight - resizing.top - 8);
+    pipSize = {
+      width: Math.max(Math.min(200, maxWidth), Math.min(maxWidth, Math.round(resizing.width + event.clientX - resizing.x))),
+      height: Math.max(Math.min(200, maxHeight), Math.min(maxHeight, Math.round(resizing.height + event.clientY - resizing.y))),
+    };
+    applyPipSize();
+  });
+  const endResize = () => {
+    if (!resizing) return;
+    appStorage.setItem('focus-pip-size', JSON.stringify(pipSize));
+    appStorage.setItem('focus-pip-position', JSON.stringify(pipPosition));
+    resizing = null;
+  };
+  el.resize.addEventListener('pointerup', endResize);
+  el.resize.addEventListener('pointercancel', endResize);
+  window.addEventListener('resize', () => {
+    if (el.shell.classList.contains('pip')) { applyPipSize(); positionPip(); }
+  });
+
+  window.electronAPI.getBackgroundLibrary().then(selected => {
+    library = selected;
+    render();
+  }).catch(() => setStatus('無法讀取背景設定，請重新啟動 App。'));
+  function showOriginalVideo() {
+    showOriginal = true;
+    appStorage.setItem('focus-show-original-video', 'on');
+    render();
+  }
+  return { render, showOriginal: showOriginalVideo };
+})();
 
