@@ -1834,6 +1834,10 @@ const Music = (() => {
   let ducked = false;
   let pollTimer = null;
   let seeking = false;
+  let lastDuration = 0;
+  let durationGrowthSamples = 0;
+  let isLiveStream = false;
+  const LONG_LIVE_DURATION = 24 * 60 * 60;
 
   // Keep the user's volume separate from the temporary reminder attenuation.
   function applyVolume() {
@@ -1941,16 +1945,33 @@ const Music = (() => {
     pollTimer = setInterval(() => {
       if (!ready || seeking) return;
       try {
+        const loadedId = youtubeVideoId(player.getVideoUrl?.() || '');
+        if (loadedId && loadedId !== MUSIC_TRACKS[currentIndex].id) return;
         const cur = player.getCurrentTime() || 0;
         const dur = player.getDuration() || 0;
-        el.current.textContent = fmtTime(cur);
-        // 直播的 duration 通常為 0，沒有有意義的進度條
+        // YouTube reports a live stream's elapsed broadcasting time as its duration.
+        // A regular video's duration stays fixed once its metadata has loaded.
+        // Extremely long durations are live broadcasts in the supported playlist.
         if (dur > 0 && isFinite(dur)) {
+          if (dur >= LONG_LIVE_DURATION) isLiveStream = true;
+          if (lastDuration > 0 && dur > lastDuration + 0.25) durationGrowthSamples++;
+          if (durationGrowthSamples >= 2) isLiveStream = true;
+          lastDuration = dur;
+        }
+        el.duration.classList.toggle('live', isLiveStream);
+        if (isLiveStream) {
+          el.current.textContent = '';
+          el.duration.textContent = '🔴 直播';
+          el.progress.value = '0';
+          el.progress.disabled = true;
+        } else if (dur > 0 && isFinite(dur)) {
+          el.current.textContent = fmtTime(cur);
           el.duration.textContent = fmtTime(dur);
           el.progress.value = String(Math.round((cur / dur) * 1000));
           el.progress.disabled = false;
         } else {
-          el.duration.textContent = "LIVE";
+          el.current.textContent = '0:00';
+          el.duration.textContent = '--:--';
           el.progress.value = "0";
           el.progress.disabled = true;
         }
@@ -1989,6 +2010,14 @@ const Music = (() => {
 
   function loadIndex(i) {
     currentIndex = (i + MUSIC_TRACKS.length) % MUSIC_TRACKS.length;
+    lastDuration = 0;
+    durationGrowthSamples = 0;
+    isLiveStream = false;
+    el.duration.classList.remove('live');
+    el.current.textContent = '0:00';
+    el.duration.textContent = '--:--';
+    el.progress.value = '0';
+    el.progress.disabled = true;
     const track = MUSIC_TRACKS[currentIndex];
     el.title.textContent = track.title;
     if (ready) {
@@ -2204,14 +2233,14 @@ const Music = (() => {
     // 進度條拖曳（直播時 disabled，不會觸發）
     el.progress.addEventListener("mousedown", () => { seeking = true; });
     el.progress.addEventListener("input", () => {
-      if (!ready) return;
+      if (!ready || isLiveStream) return;
       const dur = player.getDuration();
       if (dur > 0 && isFinite(dur)) {
         el.current.textContent = fmtTime((el.progress.value / 1000) * dur);
       }
     });
     el.progress.addEventListener("change", () => {
-      if (ready) {
+      if (ready && !isLiveStream) {
         const dur = player.getDuration();
         if (dur > 0 && isFinite(dur)) player.seekTo((el.progress.value / 1000) * dur, true);
       }

@@ -15,14 +15,17 @@ function createApp(initialStorage = {}) {
   let now = 0;
   let nextTimer = 0;
   const timers = new Map();
+  const intervals = new Map();
   const elements = new Map();
   const storage = new Map(Object.entries(initialStorage));
   const audios = [];
   const player = {
-    volume: 0, muted: true,
+    volume: 0, muted: true, duration: 0, currentTime: 0,
     setVolume(value) { player.volume = value; },
     mute() { player.muted = true; },
     unMute() { player.muted = false; },
+    getDuration() { return player.duration; },
+    getCurrentTime() { return player.currentTime; },
     playVideo() {}, pauseVideo() {}, loadVideoById() {},
   };
   class Audio {
@@ -38,7 +41,7 @@ function createApp(initialStorage = {}) {
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, {
       value: '', textContent: '', disabled: false,
-      classList: { toggle() {} },
+      classList: { toggle() {}, remove() {} },
       children: [], addEventListener(type, callback) { this[`on${type}`] = callback; }, appendChild(child) { this.children.push(child); }, setAttribute() {}, focus() {},
       set innerHTML(value) { this.children = []; },
     });
@@ -49,7 +52,8 @@ function createApp(initialStorage = {}) {
     appStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } },
     setTimeout(callback, delay) { const id = ++nextTimer; timers.set(id, { at: now + delay, callback }); return id; },
     clearTimeout(id) { timers.delete(id); },
-    setInterval() { return 0; }, clearInterval() {},
+    setInterval(callback, delay) { const id = ++nextTimer; intervals.set(id, { callback, delay }); return id; },
+    clearInterval(id) { intervals.delete(id); },
     document: {
       getElementById: element, addEventListener() {},
       createElement() { return { className: '', textContent: '', children: [], appendChild(child) { this.children.push(child); }, setAttribute() {}, classList: { add() {} } }; },
@@ -68,6 +72,7 @@ function createApp(initialStorage = {}) {
   context.window.onYouTubeIframeAPIReady();
   return {
     player, audios, element, storage,
+    pollMusic() { [...intervals.values()].find(interval => interval.delay === 500)?.callback(); },
     call(code) { return vm.runInContext(code, context); },
     advance(ms) {
       const end = now + ms;
@@ -143,6 +148,39 @@ test('a named category is reused and disappears when its last track is removed',
   tracks = JSON.parse(app.storage.get('focus-music-tracks'));
   assert.equal(tracks.some(track => track.category === 'user:夜間閱讀'), false);
   assert.equal(app.element('mp-categories').children.some(button => button.textContent === '夜間閱讀'), false);
+});
+
+test('a growing YouTube duration is shown as a live broadcast', () => {
+  const app = createApp();
+  app.player.duration = 18_000_000;
+  app.player.currentTime = 17_999_990;
+  app.pollMusic();
+  assert.equal(app.element('mp-duration').textContent, '🔴 直播');
+  app.player.duration += 1;
+  app.pollMusic();
+  app.player.duration += 1;
+  app.pollMusic();
+  assert.equal(app.element('mp-duration').textContent, '🔴 直播');
+  assert.equal(app.element('mp-current').textContent, '');
+  assert.equal(app.element('mp-progress').disabled, true);
+  app.call('Music.next()');
+  assert.equal(app.element('mp-duration').textContent, '--:--');
+  app.player.duration = 240;
+  app.player.currentTime = 30;
+  app.pollMusic();
+  app.pollMusic();
+  assert.equal(app.element('mp-duration').textContent, '4:00');
+  assert.equal(app.element('mp-progress').disabled, false);
+});
+
+test('a stationary long recording keeps its normal duration', () => {
+  const app = createApp();
+  app.player.duration = 13 * 60 * 60;
+  app.player.currentTime = 60;
+  app.pollMusic();
+  app.pollMusic();
+  assert.equal(app.element('mp-duration').textContent, '13:00:00');
+  assert.equal(app.element('mp-progress').disabled, false);
 });
 
 test('volume changes and track switches during a ring preserve the chosen volume', () => {
